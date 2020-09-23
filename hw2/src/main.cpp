@@ -3,10 +3,13 @@
 //
 
 #include <iostream>
+#include "parser.h"
 
 using namespace std;
 
+
+
 int main(){
-    cout << "Hello world" << endl;
-    return 0;
+    ConfigParser* parser = new ConfigParser("configs/config_base.txt");
+    cout << (*parser)["Lx"] << endl;
 }
