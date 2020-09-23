@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include "parser.h"
+#include "function.h"
 
 using namespace std;
 
@@ -11,5 +12,8 @@ using namespace std;
 
 int main(){
     ConfigParser* parser = new ConfigParser("configs/config_base.txt");
-    cout << (*parser)["Lx"] << endl;
+    cout << (*parser)["Ly"] << endl;
+    Function function = Function(parser);
+    cout << function.at << endl;
+    cout << function(1, 2, 3, 4) << endl;
 }
