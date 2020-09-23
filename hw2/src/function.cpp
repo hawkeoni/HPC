@@ -22,5 +22,13 @@ float Function::calculate_at(){
 }
 
 float Function::operator ()(float x, float y, float z, float t){
+    if (x == 0.0 || x == Lx) return 0;
+    // TODO: missing derivative on y!!
+    cout << "MISSING Y corner" << endl;
+    if (z == 0 || z == Lz) return 0;
     return sin(PI / Lx * x) * sin(2 * PI / Ly * y) * sin(3 * PI / Lz * z) * cos(at * t);
+}
+
+float Function::phi(float x, float y, float z){
+    return this->operator()(x, y, z, 0);
 }

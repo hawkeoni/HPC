@@ -13,4 +13,5 @@ public:
     Function(ConfigParser *parser);
     Function(unsigned int Lx, unsigned int Ly, unsigned int Lz);
     float operator ()(float x, float y, float z, float t);
+    float phi(float x, float y, float z);
 };

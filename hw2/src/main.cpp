@@ -15,5 +15,6 @@ int main(){
     cout << (*parser)["Ly"] << endl;
     Function function = Function(parser);
     cout << function.at << endl;
-    cout << function(1, 2, 3, 4) << endl;
+    cout << function(1, 2, 3, 0) << endl;
+    cout << function.phi(1, 2, 3) << endl;
 }
