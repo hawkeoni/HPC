@@ -1,4 +1,4 @@
-CC = /usr/local/Cellar/gcc/9.3.0/bin/g++-9
+CC = mpic++
 CCFLAGS = -Iinclude
 
 all: parser function src/main.cpp
