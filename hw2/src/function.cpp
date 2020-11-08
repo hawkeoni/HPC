@@ -9,10 +9,10 @@ Function::Function(ConfigParser *parser){
     at = calculate_at();
 }
 
-Function::Function(unsigned int Lx, unsigned int Ly, unsigned int Lz){
-    Lx = Lx;
-    Ly = Ly;
-    Lz = Lz;
+Function::Function(double Lx, double Ly, double Lz){
+    this->Lx = Lx;
+    this->Ly = Ly;
+    this->Lz = Lz;
     at = calculate_at();
 }
 
