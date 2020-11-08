@@ -12,10 +12,11 @@ private:
     std::map<std::string, unsigned int> parameters;
 public:
     ConfigParser(std::string filename);
+    ConfigParser(int argc, char **args);
     unsigned int operator [](std::string key);
 };
 
 
 
-#endif /* GRANDPARENT_H */
+#endif
 

@@ -1,5 +1,5 @@
 CC = mpic++
-CCFLAGS = -Iinclude
+CCFLAGS = -Iinclude --std=c++11
 
 all: parser function src/main.cpp
 	$(CC) src/main.cpp build/parser.o build/function.o -o bin/main $(CCFLAGS)

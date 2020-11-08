@@ -6,12 +6,12 @@
 
 class Function{
 private:
-    float calculate_at();
+    double calculate_at();
 public:
     unsigned int Lx, Ly, Lz;
-    float at;
+    double at;
     Function(ConfigParser *parser);
     Function(unsigned int Lx, unsigned int Ly, unsigned int Lz);
-    float operator ()(float x, float y, float z, float t);
-    float phi(float x, float y, float z);
+    double operator ()(double x, double y, double z, double t);
+    double phi(double x, double y, double z);
 };

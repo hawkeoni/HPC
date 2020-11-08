@@ -16,15 +16,15 @@ Function::Function(unsigned int Lx, unsigned int Ly, unsigned int Lz){
     at = calculate_at();
 }
 
-float Function::calculate_at(){
+double Function::calculate_at(){
     return PI * sqrt(1. / (Lx * Lx) + 1. / (Ly * Ly) + 4. / (Lz * Lz));
 
 }
 
-float Function::operator ()(float x, float y, float z, float t){
+double Function::operator ()(double x, double y, double z, double t){
     return sin(PI / Lx * x) * sin(PI / Ly * y) * sin(2 * PI / Lz * z) * cos(at * t + 2 * PI);
 }
 
-float Function::phi(float x, float y, float z){
+double Function::phi(double x, double y, double z){
     return this->operator()(x, y, z, 0);
 }
