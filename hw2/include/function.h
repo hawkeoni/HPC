@@ -10,7 +10,6 @@ private:
 public:
     double Lx, Ly, Lz;
     double at;
-    Function(ConfigParser *parser);
     Function(double Lx, double Ly, double Lz);
     double operator ()(double x, double y, double z, double t);
     double phi(double x, double y, double z);

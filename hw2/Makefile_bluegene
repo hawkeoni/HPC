@@ -1,5 +1,5 @@
-CC = mpic++
-CCFLAGS = -Iinclude --std=c++11
+CC = mpixlcxx_r
+CCFLAGS = -Iinclude 
 
 all: function src/main.cpp
 	$(CC) src/main.cpp build/function.o -o bin/main $(CCFLAGS)

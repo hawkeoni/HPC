@@ -2,13 +2,6 @@
 
 using namespace std;
 
-Function::Function(ConfigParser *parser){
-    Lx = (*parser)["Lx"];
-    Ly = (*parser)["Ly"];
-    Lz = (*parser)["Lz"];
-    at = calculate_at();
-}
-
 Function::Function(double Lx, double Ly, double Lz){
     this->Lx = Lx;
     this->Ly = Ly;
