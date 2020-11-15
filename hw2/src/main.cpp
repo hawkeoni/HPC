@@ -183,7 +183,7 @@ int main(int argc, char** argv){
     }
     // calculate errors
     calculate_error(grid_0, 0, 0);
-    // calculate_error(grid_1, tau, 1);
+    calculate_error(grid_1, tau, 1);
 
 
     //step
