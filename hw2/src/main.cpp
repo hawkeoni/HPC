@@ -1,14 +1,17 @@
-#include <iostream>
+#include <stdio.h>
 #include <mpi.h>
 #include "function.h"
 
 using namespace std;
 
 int* get_block_positions(int N, int nx, int ny, int nz){
+    /*
+    There are N blocks, specifacally nx * ny * nz.
+    This function calculates block indices by its number.
+    */
     int *res = new int[3];
     res[0] = N % nx; res[1] = N / nx % ny; res[2] = N / (nx * ny);
     return res;
-    // return make_tuple(N % nx, N / nx % ny, N / (nx * ny));
 }
 
 int* factor_number(int N){
@@ -46,10 +49,15 @@ int main(int argc, char** argv){
     int bx, by, bz; // number of dots in each block
     unsigned long B;
     double Lx, Ly, Lz, T, tau; // grid length & time
-    double hx, hy, hz; // block length
+    double hx, hy, hz; // lengths between dots on all axes
     int block_pos_x, block_pos_y, block_pos_z;
+    double block_x_len, block_y_len, block_z_len; // block lengths
     double x, y, z;
     int *tmp;
+    int K = 20;
+    bool debug = true;
+    double uijk, laplace;
+
 
 
     MPI_Init(NULL, NULL);
@@ -59,87 +67,80 @@ int main(int argc, char** argv){
 
     Lx = atof(argv[1]); Ly = atof(argv[2]); Lz = atof(argv[3]);
     Nx = atoi(argv[4]); Ny = atoi(argv[5]); Nz = atoi(argv[6]);
-    T = atof(argv[7]); tau = T / 20;
-    
+    T = atof(argv[7]); tau = T / K;
 
-    // filling variables and parameters
     tmp = factor_number(world);
 
     nx = tmp[0]; bx = Nx / nx; hx = Lx / Nx;
     ny = tmp[1]; by = Ny / ny; hy = Ly / Ny;
     nz = tmp[2]; bz = Nz / nz; hz = Lz / Nz;
-    if (rank == 0){
-        cout << "AAAAAA" << endl;
-        cout << bx << " " << by << " " << bz << endl;
+
+    Function function = Function(Lx, Ly, Lz);
+
+    // input read
+    if (rank == 0 && debug){
+        printf("===========================================================\n");
+        printf("Number of processes %d\n", world);
+        printf("Lx = %f, Ly=%f, Lz=%f\n", Lx, Ly, Lz);
+        printf("Number of dots across axes: %d, %d, %d\n", Nx, Ny, Nz);
+        printf("T = %f, K = %d, tau = %f\n", T, K, tau);
+        printf("Number of blocks across axes: %d, %d, %d\n", nx, ny, nz);
+        printf("Number of dots in a block: %d, %d, %d\n", bx, by, bz);
+        printf("Distance between dots in a block: %f, %f, %f\n", hx, hy, hz);
+        printf("===========================================================\n");
     }
+
     B = bx * by * bz;
-    //TODO: Add 2 from sides
-    cout << "before array" << endl;
+
+    // creating grids
     double ***grid_0, ***grid_1, ***grid_2;
-    grid_0 = new double**[bx];
-    grid_1 = new double**[bx];
-    for (i = 0; i < bx; i++){
-        grid_0[i] =  new double*[by];
-        grid_1[i] =  new double*[by];
-        for (j = 0; j < by; j++){
-            grid_0[i][j] = new double[bz];
-            grid_1[i][j] = new double[bz];
+    grid_0 = new double**[bx + 2];
+    grid_1 = new double**[bx + 2];
+    grid_2 = new double**[bx + 2];
+    for (i = 0; i < bx + 2; i++){
+        grid_0[i] = new double*[by + 2];
+        grid_1[i] = new double*[by + 2];
+        grid_2[i] = new double*[by + 2];
+        for (j = 0; j < by + 2; j++){
+            grid_0[i][j] = new double[bz + 2];
+            grid_1[i][j] = new double[bz + 2];
+            grid_2[i][j] = new double[bz + 2];
         }
     }
-    // double grid_0[bx][by][bz], grid_1[bx][by][bz], grid_2[bx][by][bz];
-    cout << "after array" << endl;
-    // Function function = Function(parser);
-    Function function = Function(Lx, Ly, Lz);
-    if (rank == 0)
-        cout << "Function " << function(0.5, 0.75, 0.25, 1) << endl;
-    
-    if (rank == 0){
-        cout << "Block numbers" << endl;
-        cout << nx << " " << ny << " " << nz << endl;
-    }
+
 
     tmp = get_block_positions(rank, nx, ny, nz);
-
     block_pos_x = tmp[0];
     block_pos_y = tmp[1];
     block_pos_z = tmp[2];
+    block_x_len = bx * hx; block_y_len = by * hy; block_z_len = bz * hz;
 
-    // Creating u0
-    //TODO: can I optimize this?
-    // optimize operations by excluding hx and pre-calculating block size
-    if (rank == 0){
-        cout << "weird if" << endl;
-        cout << bx << " " << by << " " << bz << endl;
-        cout << block_pos_z << endl;
+
+    if (rank == 0 && debug){
+        printf("Preparing u_0 and u_1\n");    
     }
-    cout << rank << " before loop1" << endl; 
-    for (int p = 0; p < 300; p++)
-    for (i = 0; i < bx; i ++){
-        for (j = 0; j < by; j ++){
-            for (k = 0; k < bz; k++){
-                x = i * hx + block_pos_x * bx * hx;
-                y = j * hy + block_pos_y * by * hy;
-                z = k * hz + block_pos_z * bz * hz;
+    
+    for (i = 1; i < bx + 1; i ++){
+        for (j = 1; j < by + 1; j ++){
+            for (k = 1; k < bz + 1; k++){
+                // dot x, y, z = block offset + dot offset inside the block
+                // u0
+                x = i * hx + block_pos_x * block_x_len;
+                y = j * hy + block_pos_y * block_y_len;
+                z = k * hz + block_pos_z * block_z_len;
                 grid_0[i][j][k] = function.phi(x, y, z);
-                // laplace phi
-                grid_1[i][j][k] = tau * tau / 2;
-                grid_1[i][j][k] += grid_0[i][j][k];
+                // u1
+                uijk = grid_0[i][j][k];
+                laplace = 0.;
+                laplace += (function.phi(x - hx, y, z) - 2 * uijk + function.phi(x + hx, y, z)) / (hx * hx);
+                laplace += (function.phi(x, y - hy, z) - 2 * uijk + function.phi(x, y + hy, z)) / (hy * hy);
+                laplace += (function.phi(x, y, z - hz) - 2 * uijk + function.phi(x, y, z + hz)) / (hz * hz);
+                grid_1[i][j][k] = uijk + tau * tau / 2 * laplace;
             }
         }
     }
-    // double maxdiff = 100;
-    // for (i = 0; i < bx; i ++){
-    //     for (j = 0; j < by; j ++){
-    //         for (k = 0; k < bz; k++){
-    //             x = i * hx + block_pos_x * bx * hx;
-    //             y = j * hy + block_pos_y * by * hy;
-    //             z = k * hz + block_pos_z * bz * hz;
-    //             // maxdiff = max(maxdiff, abs(grid_0[i][j][k] - function(x, y, z, 0)));
-    //         }
-    //     }
-    // }
-    // cout << "Process " << rank << " maxdiff = " << maxdiff << endl; 
 
+    
 
     MPI_Finalize();
     return 0;
