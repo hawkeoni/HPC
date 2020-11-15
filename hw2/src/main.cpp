@@ -24,7 +24,6 @@ double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
 int *rankptr, *worldptr;
 Function *u_analytical;
-
 int MAIN_PROCESS = 0;
 
 
@@ -95,9 +94,22 @@ int* factor_number(int N){
 }
 
 void step(){
-    for (i = 1; i < bx + 1; i++){
-        for (j = 1; j < by + 1; j++){
-            for (k = 1; k < bz + 1; k++){
+    
+    //ISends here https://github.com/bhavikm/Open-MPI-examples/blob/master/mpi_isend.c
+    // Send x, y, z to the neigbouring blocks
+
+    // If first blocks send x, y, z to the last blocks
+
+    // Recv x, y, z from neigbouring blocks
+
+
+    /*
+    from 2 to bx, because boundary values have not been
+    recieved yet.
+    */
+    for (i = 2; i < bx; i++){
+        for (j = 2; j < by; j++){
+            for (k = 2; k < bz; k++){
                 grid_2[i][j][k] = 1 * grid_1[i][j][k] - grid_0[i][j][k];
                 uijk = grid_1[i][j][k];
                 laplace = 0;
@@ -108,6 +120,11 @@ void step(){
             }
         }
     }
+
+    /* 
+    Waiting for IRecvs
+    Calculating boundary values
+    */
 
 }
 
@@ -210,9 +227,9 @@ int main(int argc, char** argv){
             printf("Step %d\n", p);
         step();
         calculate_error(grid_2, p * tau, p);
-        tmpptr = grid_0; 
-        grid_0 = grid_1; 
-        grid_1 = grid_2; 
+        tmpptr = grid_0;
+        grid_0 = grid_1;
+        grid_1 = grid_2;
         grid_2 = tmpptr;
     }
 
