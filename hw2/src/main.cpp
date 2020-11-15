@@ -13,7 +13,7 @@ int bx, by, bz; // number of dots in each block
 unsigned long B;
 double Lx, Ly, Lz, T, tau; // grid length & time
 double hx, hy, hz; // lengths between dots on all axes
-int block_pos_x, block_pos_y, block_pos_z;
+int block_pos_x, block_pos_y, block_pos_z; // block index on axes
 double block_x_len, block_y_len, block_z_len; // block lengths
 double x, y, z;
 int *tmp;
@@ -125,6 +125,20 @@ void step(){
     Waiting for IRecvs
     Calculating boundary values
     */
+
+    for (i = 1; i <= bx + 1; i += bx){
+        for (j = 1; j <= by + 1; j += by){
+            for (k = 1; k <= bz + 1; z+= bz){
+                grid_2[i][j][k] = 1 * grid_1[i][j][k] - grid_0[i][j][k];
+                uijk = grid_1[i][j][k];
+                laplace = 0;
+                laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
+                laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
+                laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
+                grid_2[i][j][k] += tau * tau * laplace;
+            }
+        }
+    }
 
 }
 

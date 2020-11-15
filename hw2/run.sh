@@ -1,1 +1,1 @@
-mpirun -np 3 bin/main 1 1 1 128 128 128 1
+mpirun -np 4 bin/main 1 1 1 128 128 128 1
