@@ -20,7 +20,7 @@ int *tmp;
 int K = 20;
 bool debug = true;
 double uijk, laplace;
-double ***grid_0, ***grid_1, ***grid_2;
+double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
 int *rankptr, *worldptr;
 Function *u_analytical;
@@ -32,9 +32,9 @@ void calculate_error(double ***grid, double t, int step){
     if (debug)
         printf("Calculating error in process %d\n", *rankptr);
     double distance = -1;
-    for (i = 1; i < bx + 2; i++){
-        for (j = 1; j < by + 2; j++){
-            for (k = 1; k < bz + 2; k++){
+    for (i = 1; i < bx + 1; i++){
+        for (j = 1; j < by + 1; j++){
+            for (k = 1; k < bz + 1; k++){
                 x = (i - 1) * hx + block_pos_x * block_x_len;
                 y = (j - 1) * hy + block_pos_y * block_y_len;
                 z = (k - 1) * hz + block_pos_z * block_z_len;
@@ -93,6 +93,24 @@ int* factor_number(int N){
     }
     return res;
 }
+
+void step(){
+    for (i = 1; i < bx + 1; i++){
+        for (j = 1; j < by + 1; j++){
+            for (k = 1; k < bz + 1; k++){
+                grid_2[i][j][k] = 1 * grid_1[i][j][k] - grid_0[i][j][k];
+                uijk = grid_1[i][j][k];
+                laplace = 0;
+                laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
+                laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
+                laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
+                grid_2[i][j][k] += tau * tau * laplace;
+            }
+        }
+    }
+
+}
+
 
 int main(int argc, char** argv){
     int rank, world; // rank - process id, world - number of processes
@@ -186,10 +204,17 @@ int main(int argc, char** argv){
     calculate_error(grid_1, tau, 1);
 
 
-    //step
-    // for (p = 2; p < K; p++){
-
-    // }
+    //steps
+    for (p = 2; p < K + 1; p++){
+        if (rank == 0 && debug)
+            printf("Step %d\n", p);
+        step();
+        calculate_error(grid_2, p * tau, p);
+        tmpptr = grid_0; 
+        grid_0 = grid_1; 
+        grid_1 = grid_2; 
+        grid_2 = tmpptr;
+    }
 
     MPI_Finalize();
     return 0;

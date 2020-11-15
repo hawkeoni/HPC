@@ -1,6 +1,5 @@
 #include <iostream>
 #include <cmath>
-#include "parser.h"
 
 #define PI 3.14159265
 
