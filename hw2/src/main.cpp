@@ -10,7 +10,7 @@ int i, j, k, p; // counters for loops
 int Nx, Ny, Nz; // number of dots on the grid on each direction
 int nx, ny, nz; // number of blocks in each direction
 int bx, by, bz; // number of dots in each block
-unsigned long B;
+MPI_Status status;
 double Lx, Ly, Lz, T, tau; // grid length & time
 double hx, hy, hz; // lengths between dots on all axes
 int block_pos_x, block_pos_y, block_pos_z; // block index on axes
@@ -22,8 +22,10 @@ bool debug = true;
 double uijk, laplace;
 double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
+double *xleft, *xright, *yleft, *yright, *zleft, *zright; // buffers for sending data
 int *rankptr, *worldptr;
 Function *u_analytical;
+MPI_Request request = MPI_REQUEST_NULL;
 int MAIN_PROCESS = 0;
 
 
@@ -75,7 +77,7 @@ int* factor_number(int N){
     // find maximum factor of N
     int *res = new int[3];
     int i = 1, j = 1;
-    for (i = N - 1; i >= 1; i--){
+    for (i = max(N - 1, 1); i >= 1; i--){
         if (N % i == 0) {
             break;
         }
@@ -87,16 +89,31 @@ int* factor_number(int N){
         res[0] = i;
         j = N / i;
         res[1] = j;
-        res[2] = N / i / 5;
-        // return make_tuple(i, j, N / i / j);
+        res[2] = N / i / j;
     }
     return res;
 }
 
+// buffers for sending
+
 void step(){
     
     //ISends here https://github.com/bhavikm/Open-MPI-examples/blob/master/mpi_isend.c
-    // Send x, y, z to the neigbouring blocks
+    // Send x, y, z to the neigbouring blocks if I am middle
+
+    if (block_pos_x > 0 && block_pos_x < nx - 1){
+        p = 0;
+        for (j = 1; j < by + 1; j++){
+            for (k = 1; k < bz + 1; j++){
+                xleft[by * bz] = grid_1[1][i][j];
+            }
+        }
+        MPI_Isend(xleft, p + 1, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &request);
+    }
+
+   if (block_pos_x > 0 && block_pos_x < nx - 1){
+        MPI_Irecv(xleft, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &request);
+    }
 
     // If first blocks send x, y, z to the last blocks
 
@@ -107,6 +124,9 @@ void step(){
     from 2 to bx, because boundary values have not been
     recieved yet.
     */
+    // TODO: temporary exclusion for last block!
+
+
     for (i = 2; i < bx; i++){
         for (j = 2; j < by; j++){
             for (k = 2; k < bz; k++){
@@ -125,10 +145,17 @@ void step(){
     Waiting for IRecvs
     Calculating boundary values
     */
+    // TODO: переделать индексы
+    MPI_Wait(&request, &status);
+    for (j = 1; j < by + 1; j++){
+        for (k = 1; k < bz + 1; k++){
+            grid_1[0][i][j] = xleft[(j - 1) * by + (k - 1) * bz];
+        }
+    }
 
-    for (i = 1; i <= bx + 1; i += bx){
-        for (j = 1; j <= by + 1; j += by){
-            for (k = 1; k <= bz + 1; z+= bz){
+    for (i = 1; i <= bx; i += bx - 1){
+        for (j = 1; j <= by; j += by - 1){
+            for (k = 1; k <= bz; k+= bz - 1){
                 grid_2[i][j][k] = 1 * grid_1[i][j][k] - grid_0[i][j][k];
                 uijk = grid_1[i][j][k];
                 laplace = 0;
@@ -145,26 +172,25 @@ void step(){
 
 int main(int argc, char** argv){
     int rank, world; // rank - process id, world - number of processes
-
     MPI_Init(NULL, NULL);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &world);
     // reading configuration
-
     Lx = atof(argv[1]); Ly = atof(argv[2]); Lz = atof(argv[3]);
     Nx = atoi(argv[4]); Ny = atoi(argv[5]); Nz = atoi(argv[6]);
     T = atof(argv[7]); tau = T / K;
-
     tmp = factor_number(world);
-
     nx = tmp[0]; bx = Nx / nx; hx = Lx / Nx;
     ny = tmp[1]; by = Ny / ny; hy = Ly / Ny;
     nz = tmp[2]; bz = Nz / nz; hz = Lz / Nz;
-
     rankptr = &rank; worldptr = &world;
 
     u_analytical = new Function(Lx, Ly, Lz);
     distances = new double[*worldptr];
+
+    xleft = new double[by * bz]; xright = new double[by * bz];
+    yleft = new double[bx * bz]; yright = new double[bx * bz];
+    zleft = new double[bx * by]; zright = new double[bx * by];
 
     // input read
     if (rank == 0){
@@ -178,8 +204,6 @@ int main(int argc, char** argv){
         printf("Distance between dots in a block: %f, %f, %f\n", hx, hy, hz);
         printf("===========================================================\n");
     }
-
-    B = bx * by * bz;
 
     // creating grids
     grid_0 = new double**[bx + 2];
