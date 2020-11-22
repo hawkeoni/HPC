@@ -42,10 +42,11 @@ void calculate_error(double ***grid, double t, int step){
                 y = (j - 1) * hy + block_pos_y * block_y_len;
                 z = (k - 1) * hz + block_pos_z * block_z_len;
                 distance = max(distance, abs(grid[i][j][k] - (*u_analytical)(x, y, z, t)));
+                //if (*rankptr == 0 && i * j * k % 64 == 0) printf("pos %d, %d, %d distance = %f\n", i, j, k, distance);
             }
         }
     }
-    if (debug)
+//    if (debug)
         printf("Process %d, error %f\n", *rankptr, distance);
 
     MPI_Gather(&distance, 1, MPI_DOUBLE, distances, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -113,11 +114,9 @@ void step(){
     // Sending xleft
     if (block_pos_x > 0){
         p = 0;
-        for (j = 1; j < by + 1; j++){
-            for (k = 1; k < bz + 1; k++){
+        for (j = 1; j < by + 1; j++)
+            for (k = 1; k < bz + 1; k++)
                 xleft[p++] = grid_1[1][j][k];
-            }
-        }
         MPI_Isend(xleft, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request);
     }
     if (block_pos_x < nx - 1)
@@ -143,7 +142,7 @@ void step(){
         MPI_Isend(yleft, bx * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yleft_request);
     }
     if (block_pos_y < ny - 1)
-        MPI_Irecv(yleft, by * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yleft_request);
+        MPI_Irecv(yleft, bx * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yleft_request);
 
     // Sending yright
     if (block_pos_y < ny - 1){
@@ -154,7 +153,7 @@ void step(){
         MPI_Isend(yright, bx * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yright_request);
     }
     if (block_pos_y > 0)
-        MPI_Irecv(yright, by * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yright_request);
+        MPI_Irecv(yright, bx * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yright_request);
 
     // Sending zleft
     p = 0;
@@ -181,6 +180,8 @@ void step(){
     if (block_pos_z > 0)
         MPI_Irecv(zright, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zright_request);
 
+    printf("Done sending in proc %d\n", *rankptr);
+
         
 
 
@@ -204,11 +205,8 @@ void step(){
     }
 
     if (debug) printf("Finished main loop\n");
-    /* 
-    Waiting for IRecvs
-    Calculating boundary values
-    */
-   // Wait xleft
+
+    // Wait xleft
     if (block_pos_x < nx - 1){ 
         MPI_Wait(&xleft_request, &status);
         for (j = 1; j < by + 1; j++){
@@ -218,6 +216,7 @@ void step(){
                 // bz * by - 1 *
             }
         }
+        printf("Finished xleft in proc %d\n", *rankptr);
     }
 
     // Wait xright
@@ -229,29 +228,35 @@ void step(){
                 grid_1[0][j][k] = xright[(k - 1) + bz * (j - 1)];
             }
         }
+        printf("Finished xright in proc %d\n", *rankptr);
     }
 
     // Wait yleft
     if (block_pos_y < ny - 1){
         MPI_Wait(&yleft_request, &status);
         for (i = 1; i < bx + 1; i++)
-            for (k = 1; k < bz + 1; k++)
+            for (k = 1; k < bz + 1; k++){
                 grid_1[i][by + 1][k] = yleft[(k - 1) + bz * (i - 1)];
+            }
+        printf("Finished yleft in proc %d\n", *rankptr);
     }
 
     // Wait yright
     if (block_pos_y > 0){
         MPI_Wait(&yright_request, &status);
         for (i = 1; i < bx + 1; i++)
-            for (k = 1; k < bz + 1; k++)
+            for (k = 1; k < bz + 1; k++){
                 grid_1[i][0][k] = yright[(k - 1) + bz * (i - 1)];
+            }
+        printf("Finished yright in proc %d\n", *rankptr);
     }
 
     // Wait zleft
     MPI_Wait(&zleft_request, &status);
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
-            grid_1[i][j][bz + 1] = zright[(j - 1) + (i - 1) * by];
+            grid_1[i][j][bz + 1] = zleft[(j - 1) + (i - 1) * by];
+    printf("Finished zleft in proc %d\n", *rankptr);
 
     // Wait zright
     if (block_pos_z > 0){
@@ -260,6 +265,7 @@ void step(){
             for (j = 1; j < by + 1; j++)
                 grid_1[i][j][0] = zright[(j - 1) + (i - 1) * by];
     }
+    printf("Finished zright in proc %d\n", *rankptr);
 
 
     if (debug) printf("Finished recv\n");
@@ -383,6 +389,7 @@ int main(int argc, char** argv){
         grid_0 = grid_1;
         grid_1 = grid_2;
         grid_2 = tmpptr;
+        //if (stepnum == 2) break;
     }
 
     MPI_Finalize();
