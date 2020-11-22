@@ -1,5 +1,7 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <mpi.h>
+#include <algorithm>
 #include "function.h"
 
 using namespace std;
@@ -10,7 +12,6 @@ int i, j, k, p; // counters for loops
 int Nx, Ny, Nz; // number of dots on the grid on each direction
 int nx, ny, nz; // number of blocks in each direction
 int bx, by, bz; // number of dots in each block
-MPI_Status status;
 double Lx, Ly, Lz, T, tau; // grid length & time
 double hx, hy, hz; // lengths between dots on all axes
 int block_pos_x, block_pos_y, block_pos_z; // block index on axes
@@ -26,6 +27,7 @@ double *xleft, *xright, *yleft, *yright, *zleft, *zright; // where is it coming 
 int *rankptr, *worldptr;
 Function *u_analytical;
 MPI_Request xleft_request, xright_request, yleft_request, yright_request, zleft_request, zright_request;
+MPI_Status status;
 int MAIN_PROCESS = 0;
 
 
@@ -120,10 +122,7 @@ void step(){
         }
         MPI_Isend(xleft, p + 1, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request);
     }
-    else if (block_pos_x == 0){
-        memset(xleft, 0, by * bz);
-        MPI_Isend(xleft, by * bz, MPI_DOUBLE, get_rank_by_block(nx, block_pos_y, block_pos_z));
-    }
+    /* else we keep zeros in the end block */
 
     // Sending xright
     // if (block_pos_x < nx - 1) {
@@ -137,11 +136,16 @@ void step(){
     // }
 
     // Recv xleft
-    MPI_Irecv(xleft, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xleft_request);
-    for (j = 1; j < by; j++){
-        for (k = 1; k < bz; k++){
-            grid_1[bx + 1][j][k] = xleft[k - 1 + (j - 1) * bz]
-                //TODO: what size are we?
+    if (block_pos_x < nx - 1){ 
+        MPI_Irecv(xleft, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xleft_request);
+        for (j = 1; j < by + 1; j++){
+            for (k = 1; k < bz + 1; k++){
+                grid_1[bx + 1][j][k] = xleft[(k - 1) + bz * ( j - 1)];
+                /* j = by, k = bz -> index = (bz - 1) + bz * (by - 1) =
+                 bz * by - 1 */
+            }
+        }
+    }
 
     // Recv xright
     // if (block_pos_x > 0){
@@ -178,7 +182,7 @@ void step(){
     Calculating boundary values
     */
     //
-    // xleftk
+    // xleft
     MPI_Wait(&xleft_request, &status);
     for (j = 1; j < by + 1; j++){
         for (k = 1; k < bz + 1; k++){
@@ -271,14 +275,18 @@ int main(int argc, char** argv){
         grid_2[i] = new double*[by + 2];
         for (j = 0; j < by + 2; j++){
             grid_0[i][j] = new double[bz + 2];
+            memset(grid_0[i][j], 0, bz + 2);
             grid_1[i][j] = new double[bz + 2];
+            memset(grid_1[i][j], 0, bz + 2);
             grid_2[i][j] = new double[bz + 2];
+            memset(grid_2[i][j], 0, bz + 2);
         }
     }
-    memset(grid_0, 0, (bx + 2) * (by + 1) * (bz + 2))
-    memset(grid_1, 0, (bx + 2) * (by + 1) * (bz + 2))
-    memset(grid_2, 0, (bx + 2) * (by + 1) * (bz + 2))
-
+    /*
+    memset(grid_0, 0, (bx + 2) * (by + 2) * (bz + 2));
+    memset(grid_1, 0, (bx + 2) * (by + 2) * (bz + 2));
+    memset(grid_2, 0, (bx + 2) * (by + 2) * (bz + 2));
+    */
 
     tmp = get_block_positions(rank);
     block_pos_x = tmp[0];
@@ -322,7 +330,7 @@ int main(int argc, char** argv){
     for (p = 2; p < K + 1; p++){
         if (rank == 0 && debug)
             printf("Step %d\n", p);
-        step();
+        //step();
         calculate_error(grid_2, p * tau, p);
         tmpptr = grid_0;
         grid_0 = grid_1;
