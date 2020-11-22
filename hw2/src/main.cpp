@@ -130,6 +130,7 @@ void step(){
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++)
                 xright[p++] = grid_1[bx][j][k];
+        printf("Sending xright from %d to %d, xpose is %d from nx=%d\n", *rankptr, *rankptr + 1, block_pos_x, nx);
         MPI_Isend(xright, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request);
     }
     if (block_pos_x > 0)
@@ -215,7 +216,6 @@ void step(){
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
                 grid_1[bx + 1][j][k] = xleft[(k - 1) + bz * (j - 1)];
-                // if (*rankptr == 1) cout << *rankptr << j << " " << k << endl;
                 /* j = by, k = bz -> index = (bz - 1) + bz * (by - 1) =
                  bz * by - 1 */
             }
@@ -227,6 +227,7 @@ void step(){
         MPI_Wait(&xright_request, &status);
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
+            //    printf("Proc %d, j = %d, k = %d\n", *rankptr, j, k);
                 grid_1[0][j][k] = xright[(k - 1) + bz * (j - 1)];
             }
         }
@@ -237,7 +238,7 @@ void step(){
         MPI_Wait(&yleft_request, &status);
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++)
-                grid_1[i][by + 1][k] = yleft[(i - 1) * bx + (k - 1) * bz];
+                grid_1[i][by + 1][k] = yleft[(k - 1) + bz * (i - 1)];
         printf("wait yleft\n");
     }
 
@@ -246,8 +247,7 @@ void step(){
         MPI_Wait(&yright_request, &status);
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++)
-                grid_1[i][0][k] = yright[(i - 1) * bx + (k - 1) * bz];
-
+                grid_1[i][0][k] = yright[(k - 1) + bz * (i - 1)];
     }
 
     // Wait zleft
@@ -344,6 +344,7 @@ int main(int argc, char** argv){
     block_pos_z = tmp[2];
     block_x_len = bx * hx; block_y_len = by * hy; block_z_len = bz * hz;
 
+    if (rank == 2) cout << "MY POSITION IS " << block_pos_x << " " << block_pos_y << " " << block_pos_z << endl;
 
     if (rank == 0 && debug){
         printf("Preparing u_0 and u_1\n");    
@@ -380,6 +381,8 @@ int main(int argc, char** argv){
     for (p = 2; p < K + 1; p++){
         if (rank == 0 && debug)
             printf("Step %d\n", p);
+        // TODO: remove this after debug is over
+        MPI_Barrier(MPI_COMM_WORLD);
         step();
         calculate_error(grid_2, p * tau, p);
         tmpptr = grid_0;
