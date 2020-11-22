@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include <stdio.h>
 #include <mpi.h>
 #include "function.h"
@@ -23,10 +22,10 @@ bool debug = true;
 double uijk, laplace;
 double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
-double *xleft, *xright, *yleft, *yright, *zleft, *zright; // buffers for sending data
+double *xleft, *xright, *yleft, *yright, *zleft, *zright; // where is it coming from in the source block
 int *rankptr, *worldptr;
 Function *u_analytical;
-MPI_Request request = MPI_REQUEST_NULL;
+MPI_Request xleft_request, xright_request, yleft_request, yright_request, zleft_request, zright_request;
 int MAIN_PROCESS = 0;
 
 
@@ -70,6 +69,15 @@ int* get_block_positions(int N){
     return res;
 }
 
+int get_rank_by_block(int x_offset, int y_offset, int z_offset){
+    /*
+    Return block given its offsets. A reverse function
+    for get_block_positions.
+    */
+    return x_offset + y_offset * nx + z_offset * nx * ny;
+}
+
+
 int* factor_number(int N){
     /* 
     Retruns a tuple with block numbers
@@ -102,19 +110,43 @@ void step(){
     //ISends here https://github.com/bhavikm/Open-MPI-examples/blob/master/mpi_isend.c
     // Send x, y, z to the neigbouring blocks if I am middle
 
-    if (block_pos_x > 0 && block_pos_x < nx - 1){
+    // Sending xleft
+    if (block_pos_x > 0){
         p = 0;
         for (j = 1; j < by + 1; j++){
-            for (k = 1; k < bz + 1; j++){
-                xleft[by * bz] = grid_1[1][i][j];
+            for (k = 1; k < bz + 1; k++){
+                xleft[p++] = grid_1[1][j][k];
             }
         }
-        MPI_Isend(xleft, p + 1, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &request);
+        MPI_Isend(xleft, p + 1, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request);
+    }
+    else if (block_pos_x == 0){
+        memset(xleft, 0, by * bz);
+        MPI_Isend(xleft, by * bz, MPI_DOUBLE, get_rank_by_block(nx, block_pos_y, block_pos_z));
     }
 
-   if (block_pos_x > 0 && block_pos_x < nx - 1){
-        MPI_Irecv(xleft, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &request);
-    }
+    // Sending xright
+    // if (block_pos_x < nx - 1) {
+    //     p = 0;
+    //     for (j = 1; j < by + 1; j++){
+    //         for (k = 1; k < bz + 1; j++){
+    //             xright[p++] = grid_1[bx][j][k];
+    //         }
+    //     }
+    //     MPI_Isend(xright, p + 1, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request);
+    // }
+
+    // Recv xleft
+    MPI_Irecv(xleft, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xleft_request);
+    for (j = 1; j < by; j++){
+        for (k = 1; k < bz; k++){
+            grid_1[bx + 1][j][k] = xleft[k - 1 + (j - 1) * bz]
+                //TODO: what size are we?
+
+    // Recv xright
+    // if (block_pos_x > 0){
+    //     MPI_Irecv(xright, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xright_request);
+    // }
 
     // If first blocks send x, y, z to the last blocks
 
@@ -125,8 +157,6 @@ void step(){
     from 2 to bx, because boundary values have not been
     recieved yet.
     */
-    // TODO: temporary exclusion for last block!
-
 
     for (i = 2; i < bx; i++){
         for (j = 2; j < by; j++){
@@ -142,17 +172,42 @@ void step(){
         }
     }
 
+    if (debug) printf("Finished main loop\n");
     /* 
     Waiting for IRecvs
     Calculating boundary values
     */
-    // TODO: переделать индексы
-    MPI_Wait(&request, &status);
+    //
+    // xleftk
+    MPI_Wait(&xleft_request, &status);
     for (j = 1; j < by + 1; j++){
         for (k = 1; k < bz + 1; k++){
-            grid_1[0][i][j] = xleft[(j - 1) * by + (k - 1) * bz];
+            grid_1[bx + 1][j][k] = xleft[(j - 1) * by + (k - 1) * bz];
         }
     }
+    if (debug) printf("Finished recv\n");
+    // xright
+    // MPI_Wait(&xright_request, &status);
+    // for (j = 1; j < by + 1; j++){
+    //     for (k = 1; k < bz + 1; k++){
+    //         grid_1[0][j][k] = xleft[(j - 1) * by + (k - 1) * bz];
+    //     }
+    // }
+    // yleft
+    // MPI_Wait(&yleft_request, &status);
+    // for (i = 1; i < bx + 1; i++){
+    //     for (k = 1; k < bz + 1; k++){
+    //         grid_1[i][by + 1][j] = yleft[(i - 1) * bx + (k - 1) * bz];
+    //     }
+    // }
+    // // yright
+    // MPI_Wait(&yright_request, &status);
+    // for (i = 1; i < bx + 1; i++){
+    //     for (k = 1; k < bz + 1; k++){
+    //         grid_1[i][0][j] = yright[(i - 1) * bx + (k - 1) * bz];
+    //     }
+    // }
+
 
     for (i = 1; i <= bx; i += bx - 1){
         for (j = 1; j <= by; j += by - 1){
@@ -220,6 +275,9 @@ int main(int argc, char** argv){
             grid_2[i][j] = new double[bz + 2];
         }
     }
+    memset(grid_0, 0, (bx + 2) * (by + 1) * (bz + 2))
+    memset(grid_1, 0, (bx + 2) * (by + 1) * (bz + 2))
+    memset(grid_2, 0, (bx + 2) * (by + 1) * (bz + 2))
 
 
     tmp = get_block_positions(rank);
