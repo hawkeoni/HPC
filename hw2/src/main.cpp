@@ -115,11 +115,9 @@ void step(){
     // Sending xleft
     if (block_pos_x > 0){
         p = 0;
-        for (j = 1; j < by + 1; j++){
-            for (k = 1; k < bz + 1; k++){
+        for (j = 1; j < by + 1; j++)
+            for (k = 1; k < bz + 1; k++)
                 xleft[p++] = grid_1[1][j][k];
-            }
-        }
         MPI_Isend(xleft, p + 1, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request);
     }
     if (block_pos_x < nx - 1)
@@ -128,11 +126,9 @@ void step(){
     // Sending xright
     if (block_pos_x < nx - 1){
         p = 0;
-        for (j = 1; j < by + 1; j++){
-            for (k = 1; k < bz + 1; k++){
+        for (j = 1; j < by + 1; j++)
+            for (k = 1; k < bz + 1; k++)
                 xright[p++] = grid_1[bx][j][k];
-            }
-        }
         MPI_Isend(xright, p + 1, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request);
     }
     if (block_pos_x > 0)
@@ -141,11 +137,9 @@ void step(){
     // Sending yleft
     if (block_pos_y > 0){
         p = 0;
-        for (i = 1; i < bx + 1; i++){
-            for (k = 1; k < bz + 1; k++){
+        for (i = 1; i < bx + 1; i++)
+            for (k = 1; k < bz + 1; k++)
                 yleft[p++] = grid_1[i][1][k];
-            }
-        }
         MPI_Isend(yleft, bx * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yleft_request);
     }
     if (block_pos_y < ny - 1)
@@ -154,17 +148,40 @@ void step(){
     // Sending yright
     if (block_pos_y < ny - 1){
         p = 0;
-        for (i = 1; i < bx + 1; i++){
-            for (k = 1; k < bz + 1; k++){
+        for (i = 1; i < bx + 1; i++)
+            for (k = 1; k < bz + 1; k++)
                 yright[p++] = grid_1[i][by][k];
-            }
-        }
         MPI_Isend(yright, bx * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yright_request);
     }
     if (block_pos_y > 0)
         MPI_Irecv(yright, by * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yright_request);
 
+    // Sending zleft
+    p = 0;
+    for (i = 1; i < bx + 1; i++)
+        for (j = 1; j < by + 1; j++)
+            zleft[p++] = grid_1[i][j][1];
+    if (block_pos_z > 0) 
+        MPI_Isend(zleft, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zleft_request);
+    else if (block_pos_z == 0)
+        MPI_Isend(zleft, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, nz - 1), 0, MPI_COMM_WORLD, &zleft_request);
+    if (block_pos_z < nz - 1)
+        MPI_Irecv(zleft, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zleft_request);
+    else if (block_pos_z == nz - 1)
+        MPI_Irecv(zleft, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, 0), 0, MPI_COMM_WORLD, &zleft_request);
 
+    // Sending zright
+    if (block_pos_z < nz - 1){
+        p = 0;
+        for (i = 1; i < bx + 1; i++)
+            for (j = 1; j < by + 1; j++)
+                zright[p++] = grid_1[i][j][bz];
+        MPI_Isend(zright, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zright_request);
+    }
+    if (block_pos_z > 0)
+        MPI_Irecv(zright, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zright_request);
+
+        
 
 
     /*
@@ -228,6 +245,20 @@ void step(){
             for (k = 1; k < bz + 1; k++)
                 grid_1[i][0][k] = yright[(i - 1) * bx + (k - 1) * bz];
 
+    }
+
+    // Wait zleft
+    MPI_Wait(&zleft_request, &status);
+    for (i = 1; i < bx + 1; i++)
+        for (j = 1; j < by + 1; j++)
+            grid_1[i][j][bz + 1] = zright[(i - 1) * bx + (j - 1) * by];
+
+    // Wait zright
+    if (block_pos_z > 0){
+        MPI_Wait(&zright_request, &status);
+        for (i = 1; i < bx + 1; i++)
+            for (j = 1; j < by + 1; j++)
+                grid_1[i][j][0] = zright[(i - 1) * bx + (j - 1) * by];
     }
 
 
