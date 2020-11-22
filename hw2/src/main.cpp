@@ -132,7 +132,7 @@ void step(){
         MPI_Isend(xright, p + 1, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request);
     }
     if (block_pos_x > 0)
-        MPI_Irecv(xright, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request);
+        MPI_Irecv(xright, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xright_request);
 
     // Sending yleft
     if (block_pos_y > 0){
@@ -210,13 +210,17 @@ void step(){
     */
    // Wait xleft
     if (block_pos_x < nx - 1){ 
+        printf("Before wait\n");
         MPI_Wait(&xleft_request, &status);
+        printf("After wait\n");
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
                 grid_1[bx + 1][j][k] = xleft[(k - 1) + bz * (j - 1)];
+                if (*rankptr == 1) cout << *rankptr << j << " " << k << endl;
                 /* j = by, k = bz -> index = (bz - 1) + bz * (by - 1) =
                  bz * by - 1 */
             }
+        if (debug) printf("Wait xleft\n");
         }
     }
 
@@ -228,6 +232,7 @@ void step(){
                 grid_1[0][j][k] = xright[(k - 1) + bz * (j - 1)];
             }
         }
+        if (debug) printf("Wait xright\n");
     }
 
     // Wait yleft
@@ -377,7 +382,7 @@ int main(int argc, char** argv){
     for (p = 2; p < K + 1; p++){
         if (rank == 0 && debug)
             printf("Step %d\n", p);
-        //step();
+        step();
         calculate_error(grid_2, p * tau, p);
         tmpptr = grid_0;
         grid_0 = grid_1;
