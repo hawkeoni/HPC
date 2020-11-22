@@ -115,21 +115,22 @@ void step(){
     // Sending xleft
     if (block_pos_x > 0){
         p = 0;
-        for (j = 1; j < by + 1; j++)
-            for (k = 1; k < bz + 1; k++)
+        for (j = 1; j < by + 1; j++){
+            for (k = 1; k < bz + 1; k++){
                 xleft[p++] = grid_1[1][j][k];
-        MPI_Isend(xleft, p + 1, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request);
+            }
+        }
+        MPI_Isend(xleft, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request);
     }
     if (block_pos_x < nx - 1)
         MPI_Irecv(xleft, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xleft_request);
-
     // Sending xright
     if (block_pos_x < nx - 1){
         p = 0;
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++)
                 xright[p++] = grid_1[bx][j][k];
-        MPI_Isend(xright, p + 1, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request);
+        MPI_Isend(xright, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request);
     }
     if (block_pos_x > 0)
         MPI_Irecv(xright, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xright_request);
@@ -210,17 +211,14 @@ void step(){
     */
    // Wait xleft
     if (block_pos_x < nx - 1){ 
-        printf("Before wait\n");
         MPI_Wait(&xleft_request, &status);
-        printf("After wait\n");
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
                 grid_1[bx + 1][j][k] = xleft[(k - 1) + bz * (j - 1)];
-                if (*rankptr == 1) cout << *rankptr << j << " " << k << endl;
+                // if (*rankptr == 1) cout << *rankptr << j << " " << k << endl;
                 /* j = by, k = bz -> index = (bz - 1) + bz * (by - 1) =
                  bz * by - 1 */
             }
-        if (debug) printf("Wait xleft\n");
         }
     }
 
@@ -232,7 +230,6 @@ void step(){
                 grid_1[0][j][k] = xright[(k - 1) + bz * (j - 1)];
             }
         }
-        if (debug) printf("Wait xright\n");
     }
 
     // Wait yleft
@@ -241,6 +238,7 @@ void step(){
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++)
                 grid_1[i][by + 1][k] = yleft[(i - 1) * bx + (k - 1) * bz];
+        printf("wait yleft\n");
     }
 
     // Wait yright
