@@ -108,9 +108,6 @@ int* factor_number(int N){
 
 void step(){
     
-    //ISends here https://github.com/bhavikm/Open-MPI-examples/blob/master/mpi_isend.c
-    // Send x, y, z to the neigbouring blocks if I am middle
-
     // Sending xleft
     if (block_pos_x > 0){
         p = 0;
@@ -216,7 +213,6 @@ void step(){
                 // bz * by - 1 *
             }
         }
-        printf("Finished xleft in proc %d\n", *rankptr);
     }
 
     // Wait xright
@@ -228,7 +224,6 @@ void step(){
                 grid_1[0][j][k] = xright[(k - 1) + bz * (j - 1)];
             }
         }
-        printf("Finished xright in proc %d\n", *rankptr);
     }
 
     // Wait yleft
@@ -238,7 +233,6 @@ void step(){
             for (k = 1; k < bz + 1; k++){
                 grid_1[i][by + 1][k] = yleft[(k - 1) + bz * (i - 1)];
             }
-        printf("Finished yleft in proc %d\n", *rankptr);
     }
 
     // Wait yright
@@ -248,7 +242,6 @@ void step(){
             for (k = 1; k < bz + 1; k++){
                 grid_1[i][0][k] = yright[(k - 1) + bz * (i - 1)];
             }
-        printf("Finished yright in proc %d\n", *rankptr);
     }
 
     // Wait zleft
@@ -256,7 +249,6 @@ void step(){
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
             grid_1[i][j][bz + 1] = zleft[(j - 1) + (i - 1) * by];
-    printf("Finished zleft in proc %d\n", *rankptr);
 
     // Wait zright
     if (block_pos_z > 0){
@@ -265,7 +257,6 @@ void step(){
             for (j = 1; j < by + 1; j++)
                 grid_1[i][j][0] = zright[(j - 1) + (i - 1) * by];
     }
-    printf("Finished zright in proc %d\n", *rankptr);
 
 
     if (debug) printf("Finished recv\n");
@@ -298,9 +289,9 @@ int main(int argc, char** argv){
     Nx = atoi(argv[4]); Ny = atoi(argv[5]); Nz = atoi(argv[6]);
     T = atof(argv[7]); tau = T / K;
     tmp = factor_number(world);
-    nx = tmp[0]; bx = Nx / nx; hx = Lx / Nx;
-    ny = tmp[1]; by = Ny / ny; hy = Ly / Ny;
-    nz = tmp[2]; bz = Nz / nz; hz = Lz / Nz;
+    nx = tmp[0]; bx = Nx / nx; hx = Lx / (Nx - 1);
+    ny = tmp[1]; by = Ny / ny; hy = Ly / (Ny - 1);
+    nz = tmp[2]; bz = Nz / nz; hz = Lz / (Nz - 1);
     rankptr = &rank; worldptr = &world;
 
     u_analytical = new Function(Lx, Ly, Lz);
@@ -345,7 +336,7 @@ int main(int argc, char** argv){
     block_pos_x = tmp[0];
     block_pos_y = tmp[1];
     block_pos_z = tmp[2];
-    block_x_len = bx * hx; block_y_len = by * hy; block_z_len = bz * hz;
+    block_x_len = (bx - 1) * hx; block_y_len = (by - 1) * hy; block_z_len = (bz - 1) * hz;
 
     if (rank == 0 && debug){
         printf("Preparing u_0 and u_1\n");    
