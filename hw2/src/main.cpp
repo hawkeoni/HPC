@@ -23,10 +23,12 @@ bool debug = false;
 double uijk, laplace;
 double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
-double *xleft, *xright, *yleft, *yright, *zleft, *zright; // where is it coming from in the source block
+double *xleft_from, *xright_from, *yleft_from, *yright_from, *zleft_from, *zright_from; // where it is coming from in the source block
+double *xleft_to, *xright_to, *yleft_to, *yright_to, *zleft_to, *zright_to; // where it is coming to
 int *rankptr, *worldptr;
 Function *u_analytical;
-MPI_Request xleft_request, xright_request, yleft_request, yright_request, zleft_request, zright_request;
+MPI_Request xleft_request_from, xright_request_from, yleft_request_from, yright_request_from, zleft_request_from, zright_request_from;
+MPI_Request xleft_request_to, xright_request_to, yleft_request_to, yright_request_to, zleft_request_to, zright_request_to;
 MPI_Status status;
 int MAIN_PROCESS = 0;
 
@@ -104,7 +106,6 @@ int* factor_number(int N){
     return res;
 }
 
-// buffers for sending
 
 void step(){
     
@@ -113,69 +114,69 @@ void step(){
         p = 0;
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++)
-                xleft[p++] = grid_1[1][j][k];
-        MPI_Isend(xleft, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request);
+                xleft_from[p++] = grid_1[1][j][k];
+        MPI_Isend(xleft_from, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request_from);
     }
     if (block_pos_x < nx - 1)
-        MPI_Irecv(xleft, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xleft_request);
+        MPI_Irecv(xleft_to, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xleft_request_to);
     // Sending xright
     if (block_pos_x < nx - 1){
         p = 0;
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++)
-                xright[p++] = grid_1[bx][j][k];
+                xright_from[p++] = grid_1[bx][j][k];
         //printf("Sending xright from %d to %d, xpose is %d from nx=%d\n", *rankptr, *rankptr + 1, block_pos_x, nx);
-        MPI_Isend(xright, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request);
+        MPI_Isend(xright_from, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request_from);
     }
     if (block_pos_x > 0)
-        MPI_Irecv(xright, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xright_request);
+        MPI_Irecv(xright_to, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xright_request_to);
 
     // Sending yleft
     if (block_pos_y > 0){
         p = 0;
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++)
-                yleft[p++] = grid_1[i][1][k];
-        MPI_Isend(yleft, bx * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yleft_request);
+                yleft_from[p++] = grid_1[i][1][k];
+        MPI_Isend(yleft_from, bx * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yleft_request_from);
     }
     if (block_pos_y < ny - 1)
-        MPI_Irecv(yleft, bx * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yleft_request);
+        MPI_Irecv(yleft_to, bx * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yleft_request_to);
 
     // Sending yright
     if (block_pos_y < ny - 1){
         p = 0;
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++)
-                yright[p++] = grid_1[i][by][k];
-        MPI_Isend(yright, bx * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yright_request);
+                yright_from[p++] = grid_1[i][by][k];
+        MPI_Isend(yright_from, bx * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yright_request_from);
     }
     if (block_pos_y > 0)
-        MPI_Irecv(yright, bx * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yright_request);
+        MPI_Irecv(yright_to, bx * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yright_request_to);
 
     // Sending zleft
     p = 0;
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
-            zleft[p++] = grid_1[i][j][1];
+            zleft_from[p++] = grid_1[i][j][1];
     if (block_pos_z > 0) 
-        MPI_Isend(zleft, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zleft_request);
+        MPI_Isend(zleft_from, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zleft_request_from);
     else if (block_pos_z == 0)
-        MPI_Isend(zleft, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, nz - 1), 0, MPI_COMM_WORLD, &zleft_request);
+        MPI_Isend(zleft_from, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, nz - 1), 0, MPI_COMM_WORLD, &zleft_request_from);
     if (block_pos_z < nz - 1)
-        MPI_Irecv(zleft, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zleft_request);
+        MPI_Irecv(zleft_to, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zleft_request_to);
     else if (block_pos_z == nz - 1)
-        MPI_Irecv(zleft, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, 0), 0, MPI_COMM_WORLD, &zleft_request);
+        MPI_Irecv(zleft_to, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, 0), 0, MPI_COMM_WORLD, &zleft_request_to);
 
     // Sending zright
     if (block_pos_z < nz - 1){
         p = 0;
         for (i = 1; i < bx + 1; i++)
             for (j = 1; j < by + 1; j++)
-                zright[p++] = grid_1[i][j][bz];
-        MPI_Isend(zright, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zright_request);
+                zright_from[p++] = grid_1[i][j][bz];
+        MPI_Isend(zright_from, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zright_request_from);
     }
     if (block_pos_z > 0)
-        MPI_Irecv(zright, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zright_request);
+        MPI_Irecv(zright_to, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zright_request_to);
 
     printf("Done sending in proc %d\n", *rankptr);
 
@@ -190,7 +191,7 @@ void step(){
     for (i = 2; i < bx; i++){
         for (j = 2; j < by; j++){
             for (k = 2; k < bz; k++){
-                grid_2[i][j][k] = 1 * grid_1[i][j][k] - grid_0[i][j][k];
+                grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
                 uijk = grid_1[i][j][k];
                 laplace = 0;
                 laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
@@ -205,10 +206,10 @@ void step(){
 
     // Wait xleft
     if (block_pos_x < nx - 1){ 
-        MPI_Wait(&xleft_request, &status);
+        MPI_Wait(&xleft_request_to, &status);
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
-                grid_1[bx + 1][j][k] = xleft[(k - 1) + bz * (j - 1)];
+                grid_1[bx + 1][j][k] = xleft_to[(k - 1) + bz * (j - 1)];
                 // j = by, k = bz -> index = (bz - 1) + bz * (by - 1) =
                 // bz * by - 1 *
             }
@@ -217,45 +218,45 @@ void step(){
 
     // Wait xright
     if (block_pos_x > 0){
-        MPI_Wait(&xright_request, &status);
+        MPI_Wait(&xright_request_to, &status);
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
             //    printf("Proc %d, j = %d, k = %d\n", *rankptr, j, k);
-                grid_1[0][j][k] = xright[(k - 1) + bz * (j - 1)];
+                grid_1[0][j][k] = xright_to[(k - 1) + bz * (j - 1)];
             }
         }
     }
 
     // Wait yleft
     if (block_pos_y < ny - 1){
-        MPI_Wait(&yleft_request, &status);
+        MPI_Wait(&yleft_request_to, &status);
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++){
-                grid_1[i][by + 1][k] = yleft[(k - 1) + bz * (i - 1)];
+                grid_1[i][by + 1][k] = yleft_to[(k - 1) + bz * (i - 1)];
             }
     }
 
     // Wait yright
     if (block_pos_y > 0){
-        MPI_Wait(&yright_request, &status);
+        MPI_Wait(&yright_request_to, &status);
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++){
-                grid_1[i][0][k] = yright[(k - 1) + bz * (i - 1)];
+                grid_1[i][0][k] = yright_to[(k - 1) + bz * (i - 1)];
             }
     }
 
     // Wait zleft
-    MPI_Wait(&zleft_request, &status);
+    MPI_Wait(&zleft_request_to, &status);
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
-            grid_1[i][j][bz + 1] = zleft[(j - 1) + (i - 1) * by];
+            grid_1[i][j][bz + 1] = zleft_to[(j - 1) + (i - 1) * by];
 
     // Wait zright
     if (block_pos_z > 0){
-        MPI_Wait(&zright_request, &status);
+        MPI_Wait(&zright_request_to, &status);
         for (i = 1; i < bx + 1; i++)
             for (j = 1; j < by + 1; j++)
-                grid_1[i][j][0] = zright[(j - 1) + (i - 1) * by];
+                grid_1[i][j][0] = zright_to[(j - 1) + (i - 1) * by];
     }
 
 
@@ -265,7 +266,7 @@ void step(){
     for (i = 1; i <= bx; i += bx - 1){
         for (j = 1; j <= by; j += by - 1){
             for (k = 1; k <= bz; k+= bz - 1){
-                grid_2[i][j][k] = 1 * grid_1[i][j][k] - grid_0[i][j][k];
+                grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
                 uijk = grid_1[i][j][k];
                 laplace = 0;
                 laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
@@ -297,9 +298,12 @@ int main(int argc, char** argv){
     u_analytical = new Function(Lx, Ly, Lz);
     distances = new double[*worldptr];
 
-    xleft = new double[by * bz]; xright = new double[by * bz];
-    yleft = new double[bx * bz]; yright = new double[bx * bz];
-    zleft = new double[bx * by]; zright = new double[bx * by];
+    xleft_to = new double[by * bz]; xright_to = new double[by * bz];
+    yleft_to = new double[bx * bz]; yright_to = new double[bx * bz];
+    zleft_to = new double[bx * by]; zright_to = new double[bx * by];
+    xleft_from = new double[by * bz]; xright_from = new double[by * bz];
+    yleft_from = new double[bx * bz]; yright_from = new double[bx * bz];
+    zleft_from = new double[bx * by]; zright_from = new double[bx * by];
 
     // input read
     if (rank == 0){
