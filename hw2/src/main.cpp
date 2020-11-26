@@ -19,7 +19,7 @@ double block_x_len, block_y_len, block_z_len; // block lengths
 double x, y, z;
 int *tmp;
 int K = 20;
-bool debug = false;
+bool debug = true;
 double uijk, laplace;
 double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
@@ -183,13 +183,13 @@ void step(){
 
     printf("Done sending in proc %d\n", *rankptr);
 
-        
-
 
     /*
     from 2 to bx - 1, because boundary values have not been
     recieved yet.
     */
+    printf("Start working in middle in proc %d\n", *rankptr);
+    printf("%d %d %d\n", bx, by, bz);
 
     for (i = 2; i < bx; i++){
         for (j = 2; j < by; j++){
@@ -263,10 +263,11 @@ void step(){
 
     if (debug) printf("Finished recv\n");
 
-    // Updating boundary values of the grid
-    for (i = 1; i <= bx; i += bx - 1){
-        for (j = 1; j <= by; j += by - 1){
-            for (k = 1; k <= bz; k+= bz - 1){
+
+    // updating boundary values
+    for (i = 1; i <= bx; i += bx - 1)
+        for (j = 1; j < by + 1; j++)
+            for (k = 1; k < bz + 1; k++){
                 if (i == 1 || j == 1){
                     grid_2[i][j][k] = 0;
                     break;
@@ -279,8 +280,42 @@ void step(){
                 laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
                 grid_2[i][j][k] += tau * tau * laplace;
             }
-        }
-    }
+    if (debug) printf("Finished boundary on i\n");
+    for (j = 1; j <= by; j+= by - 1)
+        for (i = 1; i < bx + 1; i++)
+            for (k = 1; k < bz + 1; k++){
+                if (i == 1 || j == 1){
+                    grid_2[i][j][k] = 0;
+                    break;
+                }
+                grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
+                uijk = grid_1[i][j][k];
+                laplace = 0;
+                laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
+                laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
+                laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
+                grid_2[i][j][k] += tau * tau * laplace;
+            }
+    if (debug) printf("Finished boundary on j\n");
+
+    for (k = 1; k <= bz; k += bz - 1)
+        for (i = 1; i <= bx + 1; i++)
+            for (j = 1; j < by + 1; j++){
+                if (i == 1 || j == 1){
+                    grid_2[i][j][k] = 0;
+                    break;
+                }
+                grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
+                uijk = grid_1[i][j][k];
+                laplace = 0;
+                laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
+                laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
+                laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
+                grid_2[i][j][k] += tau * tau * laplace;
+
+            }
+    if (debug) printf("Finished boundary on i\n");
+
 
 }
 
