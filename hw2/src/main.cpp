@@ -157,7 +157,7 @@ void step(){
     p = 0;
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
-            zleft_from[p++] = grid_1[i][j][1];
+            zleft_from[p++] = grid_1[i][j][2];
     if (block_pos_z > 0) 
         MPI_Isend(zleft_from, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zleft_request_from);
     else if (block_pos_z == 0)
@@ -168,15 +168,18 @@ void step(){
         MPI_Irecv(zleft_to, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, 0), 0, MPI_COMM_WORLD, &zleft_request_to);
 
     // Sending zright
-    if (block_pos_z < nz - 1){
-        p = 0;
-        for (i = 1; i < bx + 1; i++)
-            for (j = 1; j < by + 1; j++)
-                zright_from[p++] = grid_1[i][j][bz];
+    p = 0;
+    for (i = 0; i < bx + 1; i++)
+        for (j = 1; j < by + 1; j++)
+            zright_from[p++] = grid_1[i][j][bz - 1];
+    if (block_pos_z < nz - 1)
         MPI_Isend(zright_from, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zright_request_from);
-    }
+    else if (block_pos_z == nz - 1)
+        MPI_Isend(zright_from, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, 0), 0, MPI_COMM_WORLD, &zright_request_from);
     if (block_pos_z > 0)
         MPI_Irecv(zright_to, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zright_request_to);
+    else if (block_pos_z == 0)
+        MPI_Irecv(zright_to, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, nz - 1), 0, MPI_COMM_WORLD, &zright_request_to);
 
     printf("Done sending in proc %d\n", *rankptr);
 
@@ -252,12 +255,10 @@ void step(){
             grid_1[i][j][bz + 1] = zleft_to[(j - 1) + (i - 1) * by];
 
     // Wait zright
-    if (block_pos_z > 0){
-        MPI_Wait(&zright_request_to, &status);
-        for (i = 1; i < bx + 1; i++)
-            for (j = 1; j < by + 1; j++)
-                grid_1[i][j][0] = zright_to[(j - 1) + (i - 1) * by];
-    }
+    MPI_Wait(&zright_request_to, &status);
+    for (i = 1; i < bx + 1; i++)
+        for (j = 1; j < by + 1; j++)
+            grid_1[i][j][0] = zright_to[(j - 1) + (i - 1) * by];
 
 
     if (debug) printf("Finished recv\n");
@@ -266,6 +267,10 @@ void step(){
     for (i = 1; i <= bx; i += bx - 1){
         for (j = 1; j <= by; j += by - 1){
             for (k = 1; k <= bz; k+= bz - 1){
+                if (i == 1 || j == 1){
+                    grid_2[i][j][k] = 0;
+                    break;
+                }
                 grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
                 uijk = grid_1[i][j][k];
                 laplace = 0;
