@@ -17,6 +17,7 @@ double hx, hy, hz; // lengths between dots on all axes
 int block_pos_x, block_pos_y, block_pos_z; // block index on axes
 double block_x_len, block_y_len, block_z_len; // block lengths
 double x, y, z;
+double time_start, time_end; // time variables for speed calculation
 int *tmp;
 int K = 20;
 bool debug = false;
@@ -48,7 +49,7 @@ void calculate_error(double ***grid, double t, int step){
             }
         }
     }
-//    if (debug)
+    if (debug)
         printf("Process %d, error %f\n", *rankptr, distance);
 
     MPI_Gather(&distance, 1, MPI_DOUBLE, distances, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -334,7 +335,7 @@ int main(int argc, char** argv){
     // Deprecated
     // T = atof(argv[7]); tau = T / K;
     // New
-    tau = max(max(hx, hy), hz) / 2; T = K * tau;
+    tau = min(min(hx, hy), hz) / 2; T = K * tau;
 
     u_analytical = new Function(Lx, Ly, Lz);
     distances = new double[*worldptr];
@@ -386,7 +387,7 @@ int main(int argc, char** argv){
     if (rank == 0 && debug){
         printf("Preparing u_0 and u_1\n");    
     }
-    
+    time_start = MPI_Wtime();
     for (i = 1; i < bx + 1; i ++){
         for (j = 1; j < by + 1; j ++){
             for (k = 1; k < bz + 1; k++){
@@ -432,6 +433,9 @@ int main(int argc, char** argv){
         grid_2 = tmpptr;
         //if (stepnum == 2) break;
     }
+    time_end = MPI_Wtime();
+    if (rank == 0)
+        printf("The program ran for %f time\n", time_end - time_start);
 
     MPI_Finalize();
     return 0;
