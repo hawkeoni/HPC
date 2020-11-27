@@ -19,7 +19,7 @@ double block_x_len, block_y_len, block_z_len; // block lengths
 double x, y, z;
 int *tmp;
 int K = 20;
-bool debug = true;
+bool debug = false;
 double uijk, laplace;
 double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
@@ -169,7 +169,7 @@ void step(){
 
     // Sending zright
     p = 0;
-    for (i = 0; i < bx + 1; i++)
+    for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
             zright_from[p++] = grid_1[i][j][bz - 1];
     if (block_pos_z < nz - 1)
@@ -181,15 +181,13 @@ void step(){
     else if (block_pos_z == 0)
         MPI_Irecv(zright_to, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, nz - 1), 0, MPI_COMM_WORLD, &zright_request_to);
 
-    printf("Done sending in proc %d\n", *rankptr);
+    if (debug) printf("Done sending in proc %d\n", *rankptr);
 
 
     /*
     from 2 to bx - 1, because boundary values have not been
     recieved yet.
     */
-    printf("Start working in middle in proc %d\n", *rankptr);
-    printf("%d %d %d\n", bx, by, bz);
 
     for (i = 2; i < bx; i++){
         for (j = 2; j < by; j++){
@@ -328,12 +326,15 @@ int main(int argc, char** argv){
     // reading configuration
     Lx = atof(argv[1]); Ly = atof(argv[2]); Lz = atof(argv[3]);
     Nx = atoi(argv[4]); Ny = atoi(argv[5]); Nz = atoi(argv[6]);
-    T = atof(argv[7]); tau = T / K;
     tmp = factor_number(world);
     nx = tmp[0]; bx = Nx / nx; hx = Lx / (Nx - 1);
     ny = tmp[1]; by = Ny / ny; hy = Ly / (Ny - 1);
     nz = tmp[2]; bz = Nz / nz; hz = Lz / (Nz - 1);
     rankptr = &rank; worldptr = &world;
+    // Deprecated
+    // T = atof(argv[7]); tau = T / K;
+    // New
+    tau = max(max(hx, hy), hz) / 2; T = K * tau;
 
     u_analytical = new Function(Lx, Ly, Lz);
     distances = new double[*worldptr];
@@ -389,6 +390,11 @@ int main(int argc, char** argv){
     for (i = 1; i < bx + 1; i ++){
         for (j = 1; j < by + 1; j ++){
             for (k = 1; k < bz + 1; k++){
+                if (i == 1 || j == 1) {
+                    grid_0[i][j][k] = 0;
+                    grid_1[i][j][k] = 0;
+                    break;
+                }
                 // dot x, y, z = block offset + dot offset inside the block
                 // u0
                 x = (i - 1) * hx + block_pos_x * block_x_len;
