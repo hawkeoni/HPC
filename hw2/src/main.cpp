@@ -20,7 +20,7 @@ double x, y, z;
 double time_start, time_end; // time variables for speed calculation
 int *tmp;
 int K = 20;
-bool debug = false;
+bool debug = true;
 double uijk, laplace;
 double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
@@ -38,18 +38,23 @@ void calculate_error(double ***grid, double t, int step){
     if (debug)
         printf("Calculating error in process %d\n", *rankptr);
     double distance = -1;
+    // if (*rankptr == 1){
+    //    printf("%d %d %d   %f %f %f\n", block_pos_x, block_pos_y, block_pos_z, block_x_len, block_y_len, block_z_len);
+    // }
     for (i = 1; i < bx + 1; i++){
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
                 x = (i - 1) * hx + block_pos_x * block_x_len;
                 y = (j - 1) * hy + block_pos_y * block_y_len;
                 z = (k - 1) * hz + block_pos_z * block_z_len;
+                // if (*rankptr == 1)
+                    //printf("%d %d %d  %f %f %f || %f\t%f\n", i, j, k, x, y, z, grid[i][j][k], (*u_analytical)(x, y, z, t));
                 distance = max(distance, abs(grid[i][j][k] - (*u_analytical)(x, y, z, t)));
                 //if (*rankptr == 0 && i * j * k % 64 == 0) printf("pos %d, %d, %d distance = %f\n", i, j, k, distance);
             }
         }
     }
-    if (debug)
+    // if (debug)
         printf("Process %d, error %f\n", *rankptr, distance);
 
     MPI_Gather(&distance, 1, MPI_DOUBLE, distances, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -80,7 +85,7 @@ int get_rank_by_block(int x_offset, int y_offset, int z_offset){
     */
     return x_offset + y_offset * nx + z_offset * nx * ny;
 }
-
+ 
 
 int* factor_number(int N){
     /* 
@@ -89,21 +94,18 @@ int* factor_number(int N){
     */
     // find maximum factor of N
     int *res = new int[3];
-    int i = 1, j = 1;
-    for (i = max(N - 1, 1); i >= 1; i--){
-        if (N % i == 0) {
-            break;
+    res[0] = 1; res[1] = 1; res[2] = 1;
+    int pos = 0;
+    int i = 2;
+    while (N > 1){
+        if (N % i == 0){
+            res[pos] *= i;
+            pos = (pos + 1) % 3;
+            N /= i;
         }
+        else i++;
     }
-    if (i == 1){
-        res[0] = N; res[1] = 1; res[2] = 1;
-    }
-    else{
-        res[0] = i;
-        j = N / i;
-        res[1] = j;
-        res[2] = N / i / j;
-    }
+    // printf("%d %d %d\n", res[0], res[1], res[2]);
     return res;
 }
 
@@ -267,7 +269,7 @@ void step(){
     for (i = 1; i <= bx; i += bx - 1)
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++){
-                if (i == 1 || j == 1){
+                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0)) {
                     grid_2[i][j][k] = 0;
                     break;
                 }
@@ -283,7 +285,7 @@ void step(){
     for (j = 1; j <= by; j+= by - 1)
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++){
-                if (i == 1 || j == 1){
+                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0)) {
                     grid_2[i][j][k] = 0;
                     break;
                 }
@@ -298,9 +300,9 @@ void step(){
     if (debug) printf("Finished boundary on j\n");
 
     for (k = 1; k <= bz; k += bz - 1)
-        for (i = 1; i <= bx + 1; i++)
+        for (i = 1; i < bx + 1; i++)
             for (j = 1; j < by + 1; j++){
-                if (i == 1 || j == 1){
+                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0)) {
                     grid_2[i][j][k] = 0;
                     break;
                 }
@@ -313,7 +315,7 @@ void step(){
                 grid_2[i][j][k] += tau * tau * laplace;
 
             }
-    if (debug) printf("Finished boundary on i\n");
+    if (debug) printf("Finished boundary on k in %d\n", *rankptr);
 
 
 }
@@ -391,7 +393,7 @@ int main(int argc, char** argv){
     for (i = 1; i < bx + 1; i ++){
         for (j = 1; j < by + 1; j ++){
             for (k = 1; k < bz + 1; k++){
-                if (i == 1 || j == 1) {
+                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0)) {
                     grid_0[i][j][k] = 0;
                     grid_1[i][j][k] = 0;
                     break;
@@ -431,7 +433,7 @@ int main(int argc, char** argv){
         grid_0 = grid_1;
         grid_1 = grid_2;
         grid_2 = tmpptr;
-        //if (stepnum == 2) break;
+        if (stepnum == 2) break;
     }
     time_end = MPI_Wtime();
     if (rank == 0)
