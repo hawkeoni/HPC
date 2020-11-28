@@ -20,7 +20,7 @@ double x, y, z;
 double time_start, time_end; // time variables for speed calculation
 int *tmp;
 int K = 20;
-bool debug = true;
+bool debug = false;
 double uijk, laplace;
 double ***grid_0, ***grid_1, ***grid_2, ***tmpptr;
 double *distances;
@@ -35,6 +35,7 @@ int MAIN_PROCESS = 0;
 
 
 void calculate_error(double ***grid, double t, int step){
+    double local_distance;
     if (debug)
         printf("Calculating error in process %d\n", *rankptr);
     double distance = -1;
@@ -47,10 +48,10 @@ void calculate_error(double ***grid, double t, int step){
                 x = (i - 1) * hx + block_pos_x * block_x_len;
                 y = (j - 1) * hy + block_pos_y * block_y_len;
                 z = (k - 1) * hz + block_pos_z * block_z_len;
-                // if (*rankptr == 1)
-                    //printf("%d %d %d  %f %f %f || %f\t%f\n", i, j, k, x, y, z, grid[i][j][k], (*u_analytical)(x, y, z, t));
-                distance = max(distance, abs(grid[i][j][k] - (*u_analytical)(x, y, z, t)));
-                //if (*rankptr == 0 && i * j * k % 64 == 0) printf("pos %d, %d, %d distance = %f\n", i, j, k, distance);
+                local_distance = abs(grid[i][j][k] - (*u_analytical)(x, y, z, t));
+                distance = max(distance, local_distance);
+                if (local_distance > 0.3)
+                    printf("%d %d %d %d  %f %f %f || %f\t%f\n", *rankptr, i, j, k, x, y, z, grid[i][j][k], (*u_analytical)(x, y, z, t));
             }
         }
     }
@@ -426,14 +427,13 @@ int main(int argc, char** argv){
         if (rank == 0)
             printf("Step %d\n", stepnum);
         // TODO: remove this after debug is over
-        MPI_Barrier(MPI_COMM_WORLD);
+        // MPI_Barrier(MPI_COMM_WORLD);
         step();
         calculate_error(grid_2, stepnum * tau, stepnum);
         tmpptr = grid_0;
         grid_0 = grid_1;
         grid_1 = grid_2;
         grid_2 = tmpptr;
-        if (stepnum == 2) break;
     }
     time_end = MPI_Wtime();
     if (rank == 0)
