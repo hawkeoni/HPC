@@ -55,7 +55,7 @@ void calculate_error(double ***grid, double t, int step){
             }
         }
     }
-    // if (debug)
+    if (debug)
         printf("Process %d, error %f\n", *rankptr, distance);
 
     MPI_Gather(&distance, 1, MPI_DOUBLE, distances, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
@@ -342,6 +342,7 @@ int main(int argc, char** argv){
 
     u_analytical = new Function(Lx, Ly, Lz);
     distances = new double[*worldptr];
+    memset(distances, 0, *worldptr);
 
     xleft_to = new double[by * bz]; xright_to = new double[by * bz];
     yleft_to = new double[bx * bz]; yright_to = new double[bx * bz];
@@ -349,6 +350,13 @@ int main(int argc, char** argv){
     xleft_from = new double[by * bz]; xright_from = new double[by * bz];
     yleft_from = new double[bx * bz]; yright_from = new double[bx * bz];
     zleft_from = new double[bx * by]; zright_from = new double[bx * by];
+
+    memset(xleft_to, 0, by * bz); memset(xright_to, 0, by * bz);
+    memset(yleft_to, 0, bx * bz); memset(yright_to, 0, bx * bz);
+    memset(zleft_to, 0, by * bz); memset(zright_to, 0, by * bz);
+    memset(xleft_from, 0, by * bz); memset(xright_from, 0, by * bz);
+    memset(yleft_from, 0, bx * bz); memset(yright_from, 0, bx * bz);
+    memset(zleft_from, 0, by * bz); memset(zright_from, 0, by * bz);
 
     // input read
     if (rank == 0){
@@ -424,7 +432,7 @@ int main(int argc, char** argv){
 
     //steps
     for (int stepnum = 2; stepnum < K + 1; stepnum++){
-        if (rank == 0)
+        if (debug && rank == 0)
             printf("Step %d\n", stepnum);
         // TODO: remove this after debug is over
         // MPI_Barrier(MPI_COMM_WORLD);
