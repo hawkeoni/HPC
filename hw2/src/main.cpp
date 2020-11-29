@@ -50,8 +50,8 @@ void calculate_error(double ***grid, double t, int step){
                 z = (k - 1) * hz + block_pos_z * block_z_len;
                 local_distance = abs(grid[i][j][k] - (*u_analytical)(x, y, z, t));
                 distance = max(distance, local_distance);
-                if (local_distance > 0.3)
-                    printf("%d %d %d %d  %f %f %f || %f\t%f\n", *rankptr, i, j, k, x, y, z, grid[i][j][k], (*u_analytical)(x, y, z, t));
+                //if (local_distance > 0.3)
+                //    printf("%d %d %d %d  %f %f %f || %f\t%f\n", *rankptr, i, j, k, x, y, z, grid[i][j][k], (*u_analytical)(x, y, z, t));
             }
         }
     }
@@ -194,6 +194,16 @@ void step(){
     */
 
     for (i = 2; i < bx; i++){
+        j = 2;
+        k = 2;
+        x = (i - 1) * hx + block_pos_x * block_x_len;
+        y = (j - 1) * hy + block_pos_y * block_y_len;
+        z = (k - 1) * hz + block_pos_z * block_z_len;
+        //printf("i = %d, j = %d, k = %d\n", i, j, k);
+        //printf("hx = %f, block_pos_x = %d, block_x_len = %f\n", hx, block_pos_x, block_x_len);
+        //printf("hy = %f, block_pos_y = %d, block_y_len = %f\n", hy, block_pos_y, block_y_len);
+        //printf("hz = %f, block_pos_z = %d, block_z_len = %f\n", hz, block_pos_z, block_z_len);
+        //printf("Rankd %d x = %f y = %f z = %f\n", *rankptr, x, y, z);
         for (j = 2; j < by; j++){
             for (k = 2; k < bz; k++){
                 grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
@@ -203,6 +213,7 @@ void step(){
                 laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
                 laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
                 grid_2[i][j][k] += tau * tau * laplace;
+                //if (i == 3 || j == 3) printf("Rankd %d x = %f y = %f z = %f value = %f\n", *rankptr, x, y, z, grid_2[i][j][k]);
             }
         }
     }
@@ -393,7 +404,8 @@ int main(int argc, char** argv){
     block_pos_x = tmp[0];
     block_pos_y = tmp[1];
     block_pos_z = tmp[2];
-    block_x_len = (bx - 1) * hx; block_y_len = (by - 1) * hy; block_z_len = (bz - 1) * hz;
+    //block_x_len = (bx - 1) * hx; block_y_len = (by - 1) * hy; block_z_len = (bz - 1) * hz;
+    block_x_len = (bx) * hx; block_y_len = (by) * hy; block_z_len = (bz) * hz;
 
     if (rank == 0 && debug){
         printf("Preparing u_0 and u_1\n");    
@@ -420,6 +432,7 @@ int main(int argc, char** argv){
                 laplace += (u_analytical->phi(x, y - hy, z) - 2 * uijk + u_analytical->phi(x, y + hy, z)) / (hy * hy);
                 laplace += (u_analytical->phi(x, y, z - hz) - 2 * uijk + u_analytical->phi(x, y, z + hz)) / (hz * hz);
                 grid_1[i][j][k] = uijk + tau * tau / 2 * laplace;
+                //if (i == 3 || j == 3) printf("Rankd %d x = %f y = %f z = %f value = %f\n", rank, x, y, z, grid_1[i][j][k]);
             }
         }
     }
@@ -435,7 +448,7 @@ int main(int argc, char** argv){
         if (debug && rank == 0)
             printf("Step %d\n", stepnum);
         // TODO: remove this after debug is over
-        // MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
         step();
         calculate_error(grid_2, stepnum * tau, stepnum);
         tmpptr = grid_0;
