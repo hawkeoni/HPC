@@ -47,6 +47,10 @@ void calculate_error(double ***grid, double t, int step){
                 z = (k - 1) * hz + block_pos_z * block_z_len;
                 local_distance = abs(grid[i][j][k] - (*u_analytical)(x, y, z, t));
                 distance = max(distance, local_distance);
+               /* if (local_distance > 0.01){
+                    printf("Rank %d, ijk %d %d %d, xyz %f %f %f, tau %f, true value %f, our value %f\n", *rankptr, i, j, k, x, y, z, t, (*u_analytical)(x, y, z, t), grid[i][j][k]);
+                }
+                */
             }
         }
     }
@@ -155,29 +159,43 @@ void step(){
     p = 0;
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
-            zleft_from[p++] = grid_1[i][j][2];
+            if (block_pos_z == 0)
+                zleft_from[p++] = grid_1[i][j][2];
+            else
+                zleft_from[p++] = grid_1[i][j][1];
     if (block_pos_z > 0) 
         MPI_Isend(zleft_from, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zleft_request_from);
-    else if (block_pos_z == 0)
+    else if (block_pos_z == 0){
+        //printf("Sending from %d to %d\n", *rankptr, get_rank_by_block(block_pos_x, block_pos_y, nz - 1));
         MPI_Isend(zleft_from, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, nz - 1), 0, MPI_COMM_WORLD, &zleft_request_from);
+    }
     if (block_pos_z < nz - 1)
         MPI_Irecv(zleft_to, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zleft_request_to);
-    else if (block_pos_z == nz - 1)
+    else if (block_pos_z == nz - 1){
+        //printf("Receiving from %d in %d\n", get_rank_by_block(block_pos_x, block_pos_y, 0), *rankptr);
         MPI_Irecv(zleft_to, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, 0), 0, MPI_COMM_WORLD, &zleft_request_to);
+    }
 
     // Sending zright
     p = 0;
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
-            zright_from[p++] = grid_1[i][j][bz - 1];
+            if (block_pos_z == nz - 1)
+                zright_from[p++] = grid_1[i][j][bz - 1];
+            else
+                zright_from[p++] = grid_1[i][j][bz];
     if (block_pos_z < nz - 1)
         MPI_Isend(zright_from, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zright_request_from);
-    else if (block_pos_z == nz - 1)
+    else if (block_pos_z == nz - 1){
+        //printf("Sending from %d to %d\n", *rankptr, get_rank_by_block(block_pos_x, block_pos_y, 0));
         MPI_Isend(zright_from, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, 0), 0, MPI_COMM_WORLD, &zright_request_from);
+    }
     if (block_pos_z > 0)
         MPI_Irecv(zright_to, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zright_request_to);
-    else if (block_pos_z == 0)
+    else if (block_pos_z == 0){
+        //printf("Receiving from %d in %d\n", get_rank_by_block(block_pos_x, block_pos_y, nz - 1), *rankptr);
         MPI_Irecv(zright_to, bx * by, MPI_DOUBLE, get_rank_by_block(block_pos_x, block_pos_y, nz - 1), 0, MPI_COMM_WORLD, &zright_request_to);
+    }
 
     if (debug) printf("Done sending in proc %d\n", *rankptr);
 
@@ -247,14 +265,18 @@ void step(){
     // Wait zleft
     MPI_Wait(&zleft_request_to, &status);
     for (i = 1; i < bx + 1; i++)
-        for (j = 1; j < by + 1; j++)
+        for (j = 1; j < by + 1; j++){
             grid_1[i][j][bz + 1] = zleft_to[(j - 1) + (i - 1) * by];
+            //printf("In rank %d ij %d %d got zleft %f\n", *rankptr, i, j, zleft_to[(j - 1) + (i - 1) * by]);
+        }
 
     // Wait zright
     MPI_Wait(&zright_request_to, &status);
     for (i = 1; i < bx + 1; i++)
-        for (j = 1; j < by + 1; j++)
+        for (j = 1; j < by + 1; j++){
             grid_1[i][j][0] = zright_to[(j - 1) + (i - 1) * by];
+            //printf("In rank %d ij %d %d got zright %f\n", *rankptr, i, j, zright_to[(j - 1) + (i - 1) * by]);
+        }
 
 
     if (debug) printf("Finished recv\n");
@@ -266,15 +288,16 @@ void step(){
             for (k = 1; k < bz + 1; k++){
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
-                    break;
                 }
-                grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
-                uijk = grid_1[i][j][k];
-                laplace = 0;
-                laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
-                laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
-                laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
-                grid_2[i][j][k] += tau * tau * laplace;
+                else {
+                    grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
+                    uijk = grid_1[i][j][k];
+                    laplace = 0;
+                    laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
+                    laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
+                    laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
+                    grid_2[i][j][k] += tau * tau * laplace;
+                }
             }
     if (debug) printf("Finished boundary on i\n");
     for (j = 1; j <= by; j+= by - 1)
@@ -282,15 +305,16 @@ void step(){
             for (k = 1; k < bz + 1; k++){
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
-                    break;
                 }
-                grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
-                uijk = grid_1[i][j][k];
-                laplace = 0;
-                laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
-                laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
-                laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
-                grid_2[i][j][k] += tau * tau * laplace;
+                else {
+                    grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
+                    uijk = grid_1[i][j][k];
+                    laplace = 0;
+                    laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
+                    laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
+                    laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
+                    grid_2[i][j][k] += tau * tau * laplace;
+                }
             }
     if (debug) printf("Finished boundary on j\n");
 
@@ -299,15 +323,16 @@ void step(){
             for (j = 1; j < by + 1; j++){
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
-                    break;
                 }
-                grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
-                uijk = grid_1[i][j][k];
-                laplace = 0;
-                laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
-                laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
-                laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
-                grid_2[i][j][k] += tau * tau * laplace;
+                else {
+                    grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
+                    uijk = grid_1[i][j][k];
+                    laplace = 0;
+                    laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
+                    laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
+                    laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
+                    grid_2[i][j][k] += tau * tau * laplace;
+                }
 
             }
     if (debug) printf("Finished boundary on k in %d\n", *rankptr);
@@ -326,9 +351,9 @@ int main(int argc, char** argv){
     Nx = atoi(argv[4]); Ny = atoi(argv[5]); Nz = atoi(argv[6]);
     tmp = factor_number(world);
   
-    nx = tmp[0]; nx = atoi(argv[7]); bx = Nx / nx; hx = Lx / (Nx - 1);
-    ny = tmp[1]; ny = atoi(argv[8]); by = Ny / ny; hy = Ly / (Ny - 1);
-    nz = tmp[2]; nz = atoi(argv[9]); bz = Nz / nz; hz = Lz / (Nz - 1);
+    nx = tmp[0]; bx = Nx / nx; hx = Lx / (Nx - 1);
+    ny = tmp[1]; by = Ny / ny; hy = Ly / (Ny - 1);
+    nz = tmp[2]; bz = Nz / nz; hz = Lz / (Nz - 1);
     rankptr = &rank; worldptr = &world;
     // Deprecated
     // T = atof(argv[7]); tau = T / K;
@@ -416,6 +441,11 @@ int main(int argc, char** argv){
                 laplace += (u_analytical->phi(x, y - hy, z) - 2 * uijk + u_analytical->phi(x, y + hy, z)) / (hy * hy);
                 laplace += (u_analytical->phi(x, y, z - hz) - 2 * uijk + u_analytical->phi(x, y, z + hz)) / (hz * hz);
                 grid_1[i][j][k] = uijk + tau * tau / 2 * laplace;
+                //if (abs(grid_1[i][j][k]  - (*u_analytical)(x, y, z, tau)) > 0.003){
+                //    printf("block z %d\n", block_pos_z);
+                //    printf("k %d z %f our value %f  true value %f\n", k, z, grid_1[i][j][k], (*u_analytical)(x, y, z, tau));
+                //}
+                //MPI_Barrier(MPI_COMM_WORLD);
                 //if (i == 3 || j == 3) printf("Rankd %d x = %f y = %f z = %f value = %f\n", rank, x, y, z, grid_1[i][j][k]);
             }
         }
