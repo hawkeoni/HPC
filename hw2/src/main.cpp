@@ -39,9 +39,6 @@ void calculate_error(double ***grid, double t, int step){
     if (debug)
         printf("Calculating error in process %d\n", *rankptr);
     double distance = -1;
-    // if (*rankptr == 1){
-    //    printf("%d %d %d   %f %f %f\n", block_pos_x, block_pos_y, block_pos_z, block_x_len, block_y_len, block_z_len);
-    // }
     for (i = 1; i < bx + 1; i++){
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
@@ -50,8 +47,6 @@ void calculate_error(double ***grid, double t, int step){
                 z = (k - 1) * hz + block_pos_z * block_z_len;
                 local_distance = abs(grid[i][j][k] - (*u_analytical)(x, y, z, t));
                 distance = max(distance, local_distance);
-                //if (local_distance > 0.3)
-                //    printf("%d %d %d %d  %f %f %f || %f\t%f\n", *rankptr, i, j, k, x, y, z, grid[i][j][k], (*u_analytical)(x, y, z, t));
             }
         }
     }
@@ -129,7 +124,6 @@ void step(){
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++)
                 xright_from[p++] = grid_1[bx][j][k];
-        //printf("Sending xright from %d to %d, xpose is %d from nx=%d\n", *rankptr, *rankptr + 1, block_pos_x, nx);
         MPI_Isend(xright_from, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request_from);
     }
     if (block_pos_x > 0)
@@ -194,16 +188,6 @@ void step(){
     */
 
     for (i = 2; i < bx; i++){
-        j = 2;
-        k = 2;
-        x = (i - 1) * hx + block_pos_x * block_x_len;
-        y = (j - 1) * hy + block_pos_y * block_y_len;
-        z = (k - 1) * hz + block_pos_z * block_z_len;
-        //printf("i = %d, j = %d, k = %d\n", i, j, k);
-        //printf("hx = %f, block_pos_x = %d, block_x_len = %f\n", hx, block_pos_x, block_x_len);
-        //printf("hy = %f, block_pos_y = %d, block_y_len = %f\n", hy, block_pos_y, block_y_len);
-        //printf("hz = %f, block_pos_z = %d, block_z_len = %f\n", hz, block_pos_z, block_z_len);
-        //printf("Rankd %d x = %f y = %f z = %f\n", *rankptr, x, y, z);
         for (j = 2; j < by; j++){
             for (k = 2; k < bz; k++){
                 grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
@@ -213,7 +197,6 @@ void step(){
                 laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
                 laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
                 grid_2[i][j][k] += tau * tau * laplace;
-                //if (i == 3 || j == 3) printf("Rankd %d x = %f y = %f z = %f value = %f\n", *rankptr, x, y, z, grid_2[i][j][k]);
             }
         }
     }
@@ -281,7 +264,7 @@ void step(){
     for (i = 1; i <= bx; i += bx - 1)
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++){
-                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0)) {
+                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
                     break;
                 }
@@ -297,7 +280,7 @@ void step(){
     for (j = 1; j <= by; j+= by - 1)
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++){
-                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0)) {
+                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
                     break;
                 }
@@ -314,7 +297,7 @@ void step(){
     for (k = 1; k <= bz; k += bz - 1)
         for (i = 1; i < bx + 1; i++)
             for (j = 1; j < by + 1; j++){
-                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0)) {
+                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
                     break;
                 }
@@ -342,9 +325,10 @@ int main(int argc, char** argv){
     Lx = atof(argv[1]); Ly = atof(argv[2]); Lz = atof(argv[3]);
     Nx = atoi(argv[4]); Ny = atoi(argv[5]); Nz = atoi(argv[6]);
     tmp = factor_number(world);
-    nx = tmp[0]; bx = Nx / nx; hx = Lx / (Nx - 1);
-    ny = tmp[1]; by = Ny / ny; hy = Ly / (Ny - 1);
-    nz = tmp[2]; bz = Nz / nz; hz = Lz / (Nz - 1);
+  
+    nx = tmp[0]; nx = atoi(argv[7]); bx = Nx / nx; hx = Lx / (Nx - 1);
+    ny = tmp[1]; ny = atoi(argv[8]); by = Ny / ny; hy = Ly / (Ny - 1);
+    nz = tmp[2]; nz = atoi(argv[9]); bz = Nz / nz; hz = Lz / (Nz - 1);
     rankptr = &rank; worldptr = &world;
     // Deprecated
     // T = atof(argv[7]); tau = T / K;
@@ -414,7 +398,7 @@ int main(int argc, char** argv){
     for (i = 1; i < bx + 1; i ++){
         for (j = 1; j < by + 1; j ++){
             for (k = 1; k < bz + 1; k++){
-                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0)) {
+                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_0[i][j][k] = 0;
                     grid_1[i][j][k] = 0;
                     break;
