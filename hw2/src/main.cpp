@@ -1,8 +1,10 @@
 #include <stdlib.h>
+#include <cstring>
 #include <stdio.h>
 #include <mpi.h>
 #include <algorithm>
 #include "function.h"
+//#include <omp.h>
 
 using namespace std;
 
@@ -42,9 +44,11 @@ void calculate_error(double ***grid, double t, int step){
     for (i = 1; i < bx + 1; i++){
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
-                x = (i - 1) * hx + block_pos_x * block_x_len;
-                y = (j - 1) * hy + block_pos_y * block_y_len;
-                z = (k - 1) * hz + block_pos_z * block_z_len;
+
+
+                x = (i - 1) * hx + block_pos_x * block_x_len + min(Nx % nx, block_pos_x) * hx;
+                y = (j - 1) * hy + block_pos_y * block_y_len + min(Ny % ny, block_pos_y) * hy;
+                z = (k - 1) * hz + block_pos_z * block_z_len + min(Nz % nz, block_pos_z) * hz;
                 local_distance = abs(grid[i][j][k] - (*u_analytical)(x, y, z, t));
                 distance = max(distance, local_distance);
                /* if (local_distance > 0.01){
@@ -204,7 +208,6 @@ void step(){
     from 2 to bx - 1, because boundary values have not been
     recieved yet.
     */
-
     for (i = 2; i < bx; i++){
         for (j = 2; j < by; j++){
             for (k = 2; k < bz; k++){
@@ -354,9 +357,18 @@ int main(int argc, char** argv){
     nx = tmp[0]; bx = Nx / nx; hx = Lx / (Nx - 1);
     ny = tmp[1]; by = Ny / ny; hy = Ly / (Ny - 1);
     nz = tmp[2]; bz = Nz / nz; hz = Lz / (Nz - 1);
+
+    tmp = get_block_positions(rank);
+    block_pos_x = tmp[0];
+    block_pos_y = tmp[1];
+    block_pos_z = tmp[2];
+    block_x_len = (bx) * hx; block_y_len = (by) * hy; block_z_len = (bz) * hz;
+    // if dots are not divisble
+    if (block_pos_x <= Nx % nx - 1) bx += 1;
+    if (block_pos_y <= Ny % ny - 1) by += 1;
+    if (block_pos_z <= Nz % nz - 1) bz += 1;
     rankptr = &rank; worldptr = &world;
     // Deprecated
-    // T = atof(argv[7]); tau = T / K;
     // New
     tau = min(min(hx, hy), hz) / 2; T = K * tau;
 
@@ -409,12 +421,7 @@ int main(int argc, char** argv){
         }
     }
 
-    tmp = get_block_positions(rank);
-    block_pos_x = tmp[0];
-    block_pos_y = tmp[1];
-    block_pos_z = tmp[2];
     //block_x_len = (bx - 1) * hx; block_y_len = (by - 1) * hy; block_z_len = (bz - 1) * hz;
-    block_x_len = (bx) * hx; block_y_len = (by) * hy; block_z_len = (bz) * hz;
 
     if (rank == 0 && debug){
         printf("Preparing u_0 and u_1\n");    
@@ -423,16 +430,13 @@ int main(int argc, char** argv){
     for (i = 1; i < bx + 1; i ++){
         for (j = 1; j < by + 1; j ++){
             for (k = 1; k < bz + 1; k++){
-                if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
-                    grid_0[i][j][k] = 0;
-                    grid_1[i][j][k] = 0;
-                    break;
-                }
                 // dot x, y, z = block offset + dot offset inside the block
                 // u0
-                x = (i - 1) * hx + block_pos_x * block_x_len;
-                y = (j - 1) * hy + block_pos_y * block_y_len;
-                z = (k - 1) * hz + block_pos_z * block_z_len;
+                // 0 1 2 3 4
+                // 26 26 26 25 25
+                x = (i - 1) * hx + block_pos_x * block_x_len + min(Nx % nx, block_pos_x) * hx;
+                y = (j - 1) * hy + block_pos_y * block_y_len + min(Ny % ny, block_pos_y) * hy;
+                z = (k - 1) * hz + block_pos_z * block_z_len + min(Nz % nz, block_pos_z) * hz;
                 grid_0[i][j][k] = u_analytical->phi(x, y, z);
                 // u1
                 uijk = grid_0[i][j][k];
@@ -441,12 +445,6 @@ int main(int argc, char** argv){
                 laplace += (u_analytical->phi(x, y - hy, z) - 2 * uijk + u_analytical->phi(x, y + hy, z)) / (hy * hy);
                 laplace += (u_analytical->phi(x, y, z - hz) - 2 * uijk + u_analytical->phi(x, y, z + hz)) / (hz * hz);
                 grid_1[i][j][k] = uijk + tau * tau / 2 * laplace;
-                //if (abs(grid_1[i][j][k]  - (*u_analytical)(x, y, z, tau)) > 0.003){
-                //    printf("block z %d\n", block_pos_z);
-                //    printf("k %d z %f our value %f  true value %f\n", k, z, grid_1[i][j][k], (*u_analytical)(x, y, z, tau));
-                //}
-                //MPI_Barrier(MPI_COMM_WORLD);
-                //if (i == 3 || j == 3) printf("Rankd %d x = %f y = %f z = %f value = %f\n", rank, x, y, z, grid_1[i][j][k]);
             }
         }
     }
@@ -462,7 +460,7 @@ int main(int argc, char** argv){
         if (debug && rank == 0)
             printf("Step %d\n", stepnum);
         // TODO: remove this after debug is over
-        MPI_Barrier(MPI_COMM_WORLD);
+        // MPI_Barrier(MPI_COMM_WORLD);
         step();
         calculate_error(grid_2, stepnum * tau, stepnum);
         tmpptr = grid_0;

@@ -1,5 +1,5 @@
 CC = mpic++
-CCFLAGS = -Iinclude
+CCFLAGS = -Iinclude -fopenmp
 BLUEGENE_CC = mpixlcxx_r
 POLUS_CC = mpixlC 
 
