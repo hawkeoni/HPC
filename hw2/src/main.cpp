@@ -4,7 +4,7 @@
 #include <mpi.h>
 #include <algorithm>
 #include "function.h"
-//#include <omp.h>
+#include <omp.h>
 
 using namespace std;
 
@@ -37,25 +37,26 @@ int MAIN_PROCESS = 0;
 
 
 void calculate_error(double ***grid, double t, int step){
-    double local_distance;
+    double local_distance = -1;
     if (debug)
         printf("Calculating error in process %d\n", *rankptr);
-    double distance = -1;
-    for (i = 1; i < bx + 1; i++){
-        for (j = 1; j < by + 1; j++){
-            for (k = 1; k < bz + 1; k++){
-
-
-                x = (i - 1) * hx + block_pos_x * block_x_len + min(Nx % nx, block_pos_x) * hx;
-                y = (j - 1) * hy + block_pos_y * block_y_len + min(Ny % ny, block_pos_y) * hy;
-                z = (k - 1) * hz + block_pos_z * block_z_len + min(Nz % nz, block_pos_z) * hz;
-                local_distance = abs(grid[i][j][k] - (*u_analytical)(x, y, z, t));
-                distance = max(distance, local_distance);
-               /* if (local_distance > 0.01){
-                    printf("Rank %d, ijk %d %d %d, xyz %f %f %f, tau %f, true value %f, our value %f\n", *rankptr, i, j, k, x, y, z, t, (*u_analytical)(x, y, z, t), grid[i][j][k]);
+    double distance = -1, tmp;
+    #pragma omp parallel private(local_distance, x, y, z)
+    {
+        #pragma omp for
+        for (int i = 1; i < bx + 1; i++){
+            for (int j = 1; j < by + 1; j++){
+                for (int k = 1; k < bz + 1; k++){
+                    x = (i - 1) * hx + block_pos_x * block_x_len + min(Nx % nx, block_pos_x) * hx;
+                    y = (j - 1) * hy + block_pos_y * block_y_len + min(Ny % ny, block_pos_y) * hy;
+                    z = (k - 1) * hz + block_pos_z * block_z_len + min(Nz % nz, block_pos_z) * hz;
+                    local_distance = max(abs(grid[i][j][k] - (*u_analytical)(x, y, z, t)), local_distance);
                 }
-                */
             }
+        }
+        #pragma omp critical
+        {
+            if (local_distance > distance) distance = local_distance;
         }
     }
     if (debug)
@@ -208,6 +209,7 @@ void step(){
     from 2 to bx - 1, because boundary values have not been
     recieved yet.
     */
+    #pragma omp parallel for private(j, k, uijk, laplace)
     for (i = 2; i < bx; i++){
         for (j = 2; j < by; j++){
             for (k = 2; k < bz; k++){
@@ -286,9 +288,11 @@ void step(){
 
 
     // updating boundary values
-    for (i = 1; i <= bx; i += bx - 1)
+#pragma omp parallel for private(uijk, laplace)
+    for (k = 1; k < bz + 1; k++)
         for (j = 1; j < by + 1; j++)
-            for (k = 1; k < bz + 1; k++){
+            for (i = 1; i <= bx; i += bx - 1)
+            {
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
                 }
@@ -303,9 +307,11 @@ void step(){
                 }
             }
     if (debug) printf("Finished boundary on i\n");
-    for (j = 1; j <= by; j+= by - 1)
+#pragma omp parallel for private(uijk, laplace)
+    for (k = 1; k < bz + 1; k++)
         for (i = 1; i < bx + 1; i++)
-            for (k = 1; k < bz + 1; k++){
+            for (j = 1; j <= by; j+= by - 1)
+            {
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
                 }
@@ -321,9 +327,11 @@ void step(){
             }
     if (debug) printf("Finished boundary on j\n");
 
-    for (k = 1; k <= bz; k += bz - 1)
-        for (i = 1; i < bx + 1; i++)
-            for (j = 1; j < by + 1; j++){
+#pragma omp parallel for private(uijk, laplace)
+    for (int j = 1; j < by + 1; j++)
+        for (int i = 1; i < bx + 1; i++)
+            for (int k = 1; k <= bz; k += bz - 1)
+            {
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
                     grid_2[i][j][k] = 0;
                 }
@@ -427,6 +435,7 @@ int main(int argc, char** argv){
         printf("Preparing u_0 and u_1\n");    
     }
     time_start = MPI_Wtime();
+    #pragma omp parallel for private(j, k, x, y, z, uijk, laplace)
     for (i = 1; i < bx + 1; i ++){
         for (j = 1; j < by + 1; j ++){
             for (k = 1; k < bz + 1; k++){
@@ -460,7 +469,7 @@ int main(int argc, char** argv){
         if (debug && rank == 0)
             printf("Step %d\n", stepnum);
         // TODO: remove this after debug is over
-        // MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
         step();
         calculate_error(grid_2, stepnum * tau, stepnum);
         tmpptr = grid_0;
