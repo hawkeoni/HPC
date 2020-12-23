@@ -14,14 +14,13 @@ __global__ void calculate_inner_grid(double* grid_0, double* grid_1, double* gri
 
 __global__ void first_step(double* grid_0, double* grid_1, \
         int bx, int by, int bz, \
-        double block_size_x, double block_size_y, double block_size_z, \
         double hx, double hy, double hz, \
         double block_x_len, double block_y_len, double block_z_len, \
         int Lx, int Ly, int Lz, \
         int Nx, int Ny, int Nz, \
         int nx, int ny, int nz, \
         int block_pos_x, int block_pos_y, int block_pos_z,
-        double at){
+        double at, double t){
     int N = (bx + 2) * (by + 2) * (bz * 2);
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int i, j, k;
@@ -36,6 +35,5 @@ __global__ void first_step(double* grid_0, double* grid_1, \
     x = (i - 1) * hx + block_pos_x * block_x_len + min(Nx % nx, block_pos_x) * hx;
     y = (j - 1) * hy + block_pos_y * block_y_len + min(Ny % ny, block_pos_y) * hy;
     z = (k - 1) * hz + block_pos_z * block_z_len + min(Nz % nz, block_pos_z) * hz;
-
-    grid_0[idx] = sin(3.14 / Lx * x) * sin(3.14 / Ly * y) * sin(2 * 3.14 / Lz * z) * cos(at * t + 2 * 3.14)
+    grid_0[idx] = sin(3.14 / Lx * x) * sin(3.14 / Ly * y) * sin(2 * 3.14 / Lz * z) * cos(at * t + 2 * 3.14);
 }

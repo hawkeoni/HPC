@@ -4,6 +4,7 @@
 #include <mpi.h>
 #include <algorithm>
 #include "function.h"
+#include "cuda_utils.cu"
 
 using namespace std;
 
@@ -405,7 +406,7 @@ int main(int argc, char** argv){
         printf("Preparing u_0 and u_1\n");    
     }
     time_start = MPI_Wtime();
-    for (i = 1; i < bx + 1; i ++){
+    /*for (i = 1; i < bx + 1; i ++){
         for (j = 1; j < by + 1; j ++){
             for (k = 1; k < bz + 1; k++){
                 // dot x, y, z = block offset + dot offset inside the block
@@ -425,12 +426,26 @@ int main(int argc, char** argv){
                 grid_1[i + (bx + 2) * j + (bx + 2) * (by + 2) * k] = uijk + tau * tau / 2 * laplace;
             }
         }
-    }
+    }*/
+    double *grid_0_device, *grid_1_device;
+    cudaMalloc(&grid_0_device, (bx + 2) * (by + 2) * (bz + 2) * sizeof(double));
+    cudaMalloc(&grid_1_device, (bx + 2) * (by + 2) * (bz + 2) * sizeof(double));
+     first_step<<<256, 256>>>(grid_0_device, grid_1_device, 
+             bx, by, bz,
+             hx, hy, hz,
+             block_x_len, block_y_len, block_z_len,
+             Lx, Ly, Lz,
+             Nx, Ny, Nz,
+             nx, ny, nz,
+             block_pos_x, block_pos_y, block_pos_z,
+             u_analytical->at, 0);
+     cudaMemcpy(grid_0, grid_0_device, (bx + 2) * (by + 2) * (bz + 2) * sizeof(double), cudaMemcpyDeviceToHost);
     if (rank == 0 && debug){
         printf("Finished with u_0 and u_1\n");
     }
     // calculate errors
     calculate_error(grid_0, 0, 0);
+    return 0;
     calculate_error(grid_1, tau, 1);
 
     //steps
