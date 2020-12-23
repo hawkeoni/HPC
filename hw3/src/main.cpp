@@ -104,7 +104,7 @@ int* factor_number(int N){
     return res;
 }
 
-/*
+
 void step(){
     
     // Sending xleft
@@ -112,7 +112,7 @@ void step(){
         p = 0;
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++)
-                xleft_from[p++] = grid_1[1][j][k];
+                xleft_from[p++] = grid_1[1 + j * (bx + 2) + k * (bx + 2) * (by + 2)];
         MPI_Isend(xleft_from, by * bz, MPI_DOUBLE, *rankptr - 1, 0, MPI_COMM_WORLD, &xleft_request_from);
     }
     if (block_pos_x < nx - 1)
@@ -122,7 +122,7 @@ void step(){
         p = 0;
         for (j = 1; j < by + 1; j++)
             for (k = 1; k < bz + 1; k++)
-                xright_from[p++] = grid_1[bx][j][k];
+                xright_from[p++] = grid_1[bx + j * (bx + 2) + k * (bx + 2) * (by + 2)];
         MPI_Isend(xright_from, by * bz, MPI_DOUBLE, *rankptr + 1, 0, MPI_COMM_WORLD, &xright_request_from);
     }
     if (block_pos_x > 0)
@@ -133,7 +133,7 @@ void step(){
         p = 0;
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++)
-                yleft_from[p++] = grid_1[i][1][k];
+                yleft_from[p++] = grid_1[i + (bx + 2) + k * (bx + 2) * (by + 2)];
         MPI_Isend(yleft_from, bx * bz, MPI_DOUBLE, *rankptr - nx, 0, MPI_COMM_WORLD, &yleft_request_from);
     }
     if (block_pos_y < ny - 1)
@@ -144,7 +144,7 @@ void step(){
         p = 0;
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++)
-                yright_from[p++] = grid_1[i][by][k];
+                yright_from[p++] = grid_1[i + by * (bx + 2) + k * (bx + 2) * (by + 2)];
         MPI_Isend(yright_from, bx * bz, MPI_DOUBLE, *rankptr + nx, 0, MPI_COMM_WORLD, &yright_request_from);
     }
     if (block_pos_y > 0)
@@ -155,9 +155,9 @@ void step(){
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
             if (block_pos_z == 0)
-                zleft_from[p++] = grid_1[i][j][2];
+                zleft_from[p++] = grid_1[i + j * (bx + 2) + 2 * (bx + 2) * (by + 2)];
             else
-                zleft_from[p++] = grid_1[i][j][1];
+                zleft_from[p++] = grid_1[i + j * (bx + 2) + (bx + 2) * (by + 2)];
     if (block_pos_z > 0) 
         MPI_Isend(zleft_from, bx * by, MPI_DOUBLE, *rankptr - nx * ny, 0, MPI_COMM_WORLD, &zleft_request_from);
     else if (block_pos_z == 0){
@@ -176,9 +176,9 @@ void step(){
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++)
             if (block_pos_z == nz - 1)
-                zright_from[p++] = grid_1[i][j][bz - 1];
+                zright_from[p++] = grid_1[i + j * (bx + 2) + (bz - 1) * (bx + 2) * (by + 2)];
             else
-                zright_from[p++] = grid_1[i][j][bz];
+                zright_from[p++] = grid_1[i + j * (bx + 2) + bz * (bx + 2) * (by + 2)];
     if (block_pos_z < nz - 1)
         MPI_Isend(zright_from, bx * by, MPI_DOUBLE, *rankptr + nx * ny, 0, MPI_COMM_WORLD, &zright_request_from);
     else if (block_pos_z == nz - 1){
@@ -200,27 +200,25 @@ void step(){
     for (i = 2; i < bx; i++){
         for (j = 2; j < by; j++){
             for (k = 2; k < bz; k++){
-                grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
-                uijk = grid_1[i][j][k];
+                grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] = 2 * grid_1[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] - grid_0[i + j * (bx + 2) + k * (bx + 2) * (by + 2)];
+                uijk = grid_1[i + j * (bx + 2) + k * (bx + 2) * (by + 2)];
                 laplace = 0;
-                laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
-                laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
-                laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
-                grid_2[i][j][k] += tau * tau * laplace;
+                laplace += (grid_1[i - 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)]) / (hx * hx);
+                laplace += (grid_1[i + (j - 1) * (bx + 2) + k * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + (j + 1) * (bx + 2) + k * (bx + 2) * (by + 2)]) / (hy * hy);
+                laplace += (grid_1[i + j * (bx + 2) + (k - 1) * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + j * (bx + 2) + (k + 1) * (bx + 2) * (by + 2)]) / (hz * hz);
+                grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] += tau * tau * laplace;
             }
         }
     }
 
-    if (debug) printf("Finished main loop\n");
+    if (debug) printf("Finished main loop in proc %d\n", *rankptr);
 
     // Wait xleft
     if (block_pos_x < nx - 1){ 
         MPI_Wait(&xleft_request_to, &status);
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
-                grid_1[bx + 1][j][k] = xleft_to[(k - 1) + bz * (j - 1)];
-                // j = by, k = bz -> index = (bz - 1) + bz * (by - 1) =
-                // bz * by - 1 *
+                grid_1[bx + 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)] = xleft_to[(k - 1) + bz * (j - 1)];
             }
         }
     }
@@ -231,7 +229,7 @@ void step(){
         for (j = 1; j < by + 1; j++){
             for (k = 1; k < bz + 1; k++){
             //    printf("Proc %d, j = %d, k = %d\n", *rankptr, j, k);
-                grid_1[0][j][k] = xright_to[(k - 1) + bz * (j - 1)];
+                grid_1[j * (bx + 2) + k * (bx + 2) * (by + 2)] = xright_to[(k - 1) + bz * (j - 1)];
             }
         }
     }
@@ -241,7 +239,7 @@ void step(){
         MPI_Wait(&yleft_request_to, &status);
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++){
-                grid_1[i][by + 1][k] = yleft_to[(k - 1) + bz * (i - 1)];
+                grid_1[i + (by + 1) * (bx + 2) + k * (bx + 2) * (by + 2)] = yleft_to[(k - 1) + bz * (i - 1)];
             }
     }
 
@@ -250,7 +248,7 @@ void step(){
         MPI_Wait(&yright_request_to, &status);
         for (i = 1; i < bx + 1; i++)
             for (k = 1; k < bz + 1; k++){
-                grid_1[i][0][k] = yright_to[(k - 1) + bz * (i - 1)];
+                grid_1[i + k * (bx + 2) * (by + 2)] = yright_to[(k - 1) + bz * (i - 1)];
             }
     }
 
@@ -258,7 +256,7 @@ void step(){
     MPI_Wait(&zleft_request_to, &status);
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++){
-            grid_1[i][j][bz + 1] = zleft_to[(j - 1) + (i - 1) * by];
+            grid_1[i + j * (bx + 2) + (bz + 1) * (bx + 2) * (by + 2)] = zleft_to[(j - 1) + (i - 1) * by];
             //printf("In rank %d ij %d %d got zleft %f\n", *rankptr, i, j, zleft_to[(j - 1) + (i - 1) * by]);
         }
 
@@ -266,7 +264,7 @@ void step(){
     MPI_Wait(&zright_request_to, &status);
     for (i = 1; i < bx + 1; i++)
         for (j = 1; j < by + 1; j++){
-            grid_1[i][j][0] = zright_to[(j - 1) + (i - 1) * by];
+            grid_1[i + j * (bx + 2)] = zright_to[(j - 1) + (i - 1) * by];
             //printf("In rank %d ij %d %d got zright %f\n", *rankptr, i, j, zright_to[(j - 1) + (i - 1) * by]);
         }
 
@@ -280,16 +278,16 @@ void step(){
             for (i = 1; i <= bx; i += bx - 1)
             {
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
-                    grid_2[i][j][k] = 0;
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] = 0;
                 }
                 else {
-                    grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
-                    uijk = grid_1[i][j][k];
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] = 2 * grid_1[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] - grid_0[i + j * (bx + 2) + k * (bx + 2) * (by + 2)];
+                    uijk = grid_1[i + j * (bx + 2) + k * (bx + 2) * (by + 2)];
                     laplace = 0;
-                    laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
-                    laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
-                    laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
-                    grid_2[i][j][k] += tau * tau * laplace;
+                    laplace += (grid_1[i - 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)]) / (hx * hx);
+                    laplace += (grid_1[i + (j - 1) * (bx + 2) + k * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + (j + 1) * (bx + 2) + k * (bx + 2) * (by + 2)]) / (hy * hy);
+                    laplace += (grid_1[i + j * (bx + 2) + (k - 1) * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + j * (bx + 2) + (k + 1) * (bx + 2) * (by + 2)]) / (hz * hz);
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] += tau * tau * laplace;
                 }
             }
     if (debug) printf("Finished boundary on i\n");
@@ -298,16 +296,16 @@ void step(){
             for (j = 1; j <= by; j+= by - 1)
             {
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
-                    grid_2[i][j][k] = 0;
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] = 0;
                 }
                 else {
-                    grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
-                    uijk = grid_1[i][j][k];
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] = 2 * grid_1[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] - grid_0[i + j * (bx + 2) + k * (bx + 2) * (by + 2)];
+                    uijk = grid_1[i + j * (bx + 2) + k * (bx + 2) * (by + 2)];
                     laplace = 0;
-                    laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
-                    laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
-                    laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
-                    grid_2[i][j][k] += tau * tau * laplace;
+                    laplace += (grid_1[i - 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)]) / (hx * hx);
+                    laplace += (grid_1[i + (j - 1) * (bx + 2) + k * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + (j + 1) * (bx + 2) + k * (bx + 2) * (by + 2)]) / (hy * hy);
+                    laplace += (grid_1[i + j * (bx + 2) + (k - 1) * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + j * (bx + 2) + (k + 1) * (bx + 2) * (by + 2)]) / (hz * hz);
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] += tau * tau * laplace;
                 }
             }
     if (debug) printf("Finished boundary on j\n");
@@ -317,21 +315,21 @@ void step(){
             for (int k = 1; k <= bz; k += bz - 1)
             {
                 if ((i == 1 && block_pos_x == 0) || (j == 1 && block_pos_y == 0) || (i == bx && block_pos_x == nx - 1) || (j == by && block_pos_y == ny - 1)) {
-                    grid_2[i][j][k] = 0;
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] = 0;
                 }
                 else {
-                    grid_2[i][j][k] = 2 * grid_1[i][j][k] - grid_0[i][j][k];
-                    uijk = grid_1[i][j][k];
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] = 2 * grid_1[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] - grid_0[i + j * (bx + 2) + k * (bx + 2) * (by + 2)];
+                    uijk = grid_1[i + j * (bx + 2) + k * (bx + 2) * (by + 2)];
                     laplace = 0;
-                    laplace += (grid_1[i - 1][j][k] - 2 * uijk + grid_1[i + 1][j][k]) / (hx * hx);
-                    laplace += (grid_1[i][j - 1][k] - 2 * uijk + grid_1[i][j + 1][k]) / (hy * hy);
-                    laplace += (grid_1[i][j][k - 1] - 2 * uijk + grid_1[i][j][k + 1]) / (hz * hz);
-                    grid_2[i][j][k] += tau * tau * laplace;
+                    laplace += (grid_1[i - 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + 1 + j * (bx + 2) + k * (bx + 2) * (by + 2)]) / (hx * hx);
+                    laplace += (grid_1[i + (j - 1) * (bx + 2) + k * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + (j + 1) * (bx + 2) + k * (bx + 2) * (by + 2)]) / (hy * hy);
+                    laplace += (grid_1[i + j * (bx + 2) + (k - 1) * (bx + 2) * (by + 2)] - 2 * uijk + grid_1[i + j * (bx + 2) + (k + 1) * (bx + 2) * (by + 2)]) / (hz * hz);
+                    grid_2[i + j * (bx + 2) + k * (bx + 2) * (by + 2)] += tau * tau * laplace;
                 }
 
             }
     if (debug) printf("Finished boundary on k in %d\n", *rankptr);
-}*/
+}
 
 
 int main(int argc, char** argv){
@@ -436,7 +434,6 @@ int main(int argc, char** argv){
     calculate_error(grid_1, tau, 1);
 
     //steps
-    /*
     for (int stepnum = 2; stepnum < K + 1; stepnum++){
         if (debug && rank == 0)
             printf("Step %d\n", stepnum);
@@ -449,7 +446,6 @@ int main(int argc, char** argv){
         grid_1 = grid_2;
         grid_2 = tmpptr;
     }
-    */
     time_end = MPI_Wtime();
     if (rank == 0)
         printf("The program ran for %f time\n", time_end - time_start);
